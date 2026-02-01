@@ -1,0 +1,78 @@
+本软件使用了以下第三方库：
+
+fvp (https://pub.dev/packages/fvp)
+- 版本: 0.35.2
+- 作者: Wang Bin
+- 许可证: GNU Lesser General Public License v2.1
+- 完整许可证文本见: licenses/LGPL-2.1.txt
+- 如需替换此库，请修改 pubspec.yaml 中的 fvp 版本
+
+flutter
+- 版本: SDK
+- 作者: Google
+- 许可证: BSD-3-Clause
+
+flutter_riverpod
+- 版本: 2.5.1
+- 作者: Remi Rousselet
+- 许可证: MIT
+
+go_router
+- 版本: 14.0.0
+- 作者: Flutter Team
+- 许可证: BSD-3-Clause
+
+webdav_client
+- 版本: 1.2.0
+- 作者: Related Contributors
+- 许可证: MIT
+
+video_player
+- 版本: 2.8.2
+- 作者: Flutter Team
+- 许可证: BSD-3-Clause
+
+cached_network_image
+- 版本: 3.3.1
+- 作者: Baseflow
+- 许可证: MIT
+
+photo_view
+- 版本: 0.14.0
+- 作者: Renan C. Araújo
+- 许可证: MIT
+
+flutter_pdfview
+- 版本: 1.3.2
+- 作者: EnduranceCode
+- 许可证: MIT
+
+dio
+- 版本: 5.4.0
+- 作者: cfug
+- 许可证: MIT
+
+flutter_secure_storage
+- 版本: 9.0.0
+- 作者: Mogol
+- 许可证: BSD-3-Clause
+
+shared_preferences
+- 版本: 2.2.2
+- 作者: Flutter Team
+- 许可证: BSD-3-Clause
+
+path_provider
+- 版本: 2.1.5
+- 作者: Flutter Team
+- 许可证: BSD-3-Clause
+
+permission_handler
+- 版本: 12.0.1
+- 作者: Baseflow
+- 许可证: MIT
+
+share_plus
+- 版本: 10.1.2
+- 作者: Flutter Community
+- 许可证: BSD-3-Clause

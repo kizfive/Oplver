@@ -1,0 +1,17 @@
+# Android 签名密钥配置文件示例
+# 使用说明：
+# 1. 将此文件复制为 key.properties
+# 2. 填入你的实际签名密钥信息
+# 3. 确保 key.properties 已添加到 .gitignore（不要提交到 Git）
+
+# 密钥库密码
+storePassword=your_store_password_here
+
+# 密钥密码
+keyPassword=your_key_password_here
+
+# 密钥别名
+keyAlias=your_key_alias_here
+
+# 密钥库文件路径（绝对路径或相对于项目根目录的路径）
+storeFile=/path/to/your/keystore.jks

@@ -1,0 +1,18 @@
+# Android 本地配置文件示例
+# 使用说明：
+# 1. 将此文件复制为 local.properties
+# 2. 填入你本地的 SDK 路径
+# 3. 确保 local.properties 已添加到 .gitignore（不要提交到 Git）
+
+# Android SDK 路径
+sdk.dir=C:\\Users\\YourUsername\\AppData\\Local\\Android\\sdk
+
+# Flutter SDK 路径
+flutter.sdk=C:\\path\\to\\flutter
+
+# 构建模式（可选）
+flutter.buildMode=debug
+
+# 版本信息（可选）
+flutter.versionName=1.0.0
+flutter.versionCode=1
