@@ -5,6 +5,7 @@ enum AppFileType {
   image,
   audio,
   pdf,
+  archive,
   folder,
   unknown,
 }

@@ -1,0 +1,12 @@
+一个.manga文件里应该存入以下信息:
+1.漫画名称
+2.漫画作者
+3.漫画封面图片在文件夹内的相对路径(就是封面应该是哪张图)
+4.漫画原链接(选填)
+{
+"title": "示例漫画名",
+"author": "示例作者",
+"cover": "images/cover.jpg",
+"originalUrl": "https://example.com/source",
+"Page": "3"
+}

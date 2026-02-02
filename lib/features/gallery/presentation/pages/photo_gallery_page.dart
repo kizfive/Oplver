@@ -11,6 +11,7 @@ import 'package:path/path.dart' as path_context;
 
 import '../../../files/application/download_service.dart';
 import '../../../settings/data/general_settings_provider.dart';
+import '../../../../core/enums/download_mode.dart';
 import '../../../history/data/file_history_provider.dart';
 
 class PhotoGalleryPage extends ConsumerStatefulWidget {

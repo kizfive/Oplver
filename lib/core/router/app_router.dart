@@ -10,7 +10,12 @@ import '../../features/gallery/presentation/pages/photo_gallery_page.dart';
 import '../../features/home/presentation/pages/home_page.dart';
 import '../../features/home/presentation/pages/main_screen.dart';
 import '../../features/profile/presentation/pages/profile_page.dart';
+import '../../features/manga/presentation/pages/manga_list_page.dart';
+import '../../features/manga/presentation/pages/manga_reader_page.dart';
+import '../../features/manga/data/manga_models.dart';
+import '../../features/settings/presentation/pages/settings_page.dart';
 import '../../features/auth/data/auth_provider.dart';
+import '../../features/settings/data/navigation_settings_provider.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 final _homeNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'homeNav');
@@ -18,6 +23,10 @@ final _sectionANavigatorKey =
     GlobalKey<NavigatorState>(debugLabel: 'sectionANav');
 final _sectionBNavigatorKey =
     GlobalKey<NavigatorState>(debugLabel: 'sectionBNav');
+final _sectionCNavigatorKey =
+    GlobalKey<NavigatorState>(debugLabel: 'sectionCNav');
+final _sectionDNavigatorKey =
+    GlobalKey<NavigatorState>(debugLabel: 'sectionDNav');
 
 // 创建 Router Provider 以便监听认证状态变化 (重定向逻辑)
 final routerProvider = Provider<GoRouter>((ref) {
@@ -41,7 +50,12 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       // 已登录但在登录页或根路径，跳转到主页 (Tab页 /home)
       if (isLoggedIn && (isLoggingIn || isInitial)) {
-        return '/home';
+        final navSettings = ref.read(navigationSettingsProvider);
+        final defaultItem = kAllNavigationItems.firstWhere(
+           (item) => item.key == navSettings.defaultPageKey,
+           orElse: () => kAllNavigationItems.first
+        );
+        return defaultItem.route;
       }
 
       return null;
@@ -96,6 +110,21 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/download_records',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const DownloadRecordPage(),
+      ),
+      // 漫画阅读器路由
+      GoRoute(
+        path: '/manga/reader',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) {
+          final manga = state.extra as MangaInfo;
+          return MangaReaderPage(manga: manga);
+        },
+      ),
+      // 设置页面路由
+      GoRoute(
+        path: '/settings',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const SettingsPage(),
       ),
       // 文件夹详情页面 - 全屏显示，不显示底部导航栏
       GoRoute(
@@ -166,14 +195,27 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path:
                     '/browse', // Changed from /home since home is now HomePage
-                builder: (context, state) =>
-                    const FileBrowserPage(initialPath: '/'),
+                builder: (context, state) {
+                  final highlight = state.uri.queryParameters['highlight'];
+                  return FileBrowserPage(
+                      initialPath: '/', highlightFileName: highlight);
+                },
               ),
             ],
           ),
-          // Tab 3: 个人中心 (Profile)
+          // Tab 3: 漫画 (Manga)
           StatefulShellBranch(
-            navigatorKey: _sectionBNavigatorKey,
+            navigatorKey: _sectionCNavigatorKey,
+            routes: [
+              GoRoute(
+                path: '/manga',
+                builder: (context, state) => const MangaListPage(),
+              ),
+            ],
+          ),
+          // Tab 4: 个人中心 (Profile)
+          StatefulShellBranch(
+            navigatorKey: _sectionDNavigatorKey,
             routes: [
               GoRoute(
                 path: '/profile',

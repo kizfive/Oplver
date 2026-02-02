@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../../../core/network/webdav_service.dart';
+import '../../../../core/network/openlist_service.dart';
+import '../../../../core/network/openlist_api_service.dart';
 import '../../../core/services/log_service.dart';
 
 // 全局 WebDAV 服务 Provider
@@ -29,9 +31,10 @@ class AuthState {
 // Auth Notifier
 class AuthNotifier extends StateNotifier<AuthState> {
   final WebDavService _webDavService;
+  final OpenListApiService _apiService;
   final _storage = const FlutterSecureStorage();
 
-  AuthNotifier(this._webDavService) : super(AuthState());
+  AuthNotifier(this._webDavService, this._apiService) : super(AuthState());
 
   Future<void> login(String url, String username, String password,
       bool rememberMe, bool autoLogin) async {
@@ -42,6 +45,22 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final success = await _webDavService.connect(url, username, password);
 
       if (success) {
+        // 尝试登录 OpenList API
+        // 如果 URL 包含 /dav 后缀，则去除，因为 API 通常位于根路径或 /api
+        String apiUrl = url;
+        if (apiUrl.endsWith('/dav/')) {
+          apiUrl = apiUrl.substring(0, apiUrl.length - 5);
+        } else if (apiUrl.endsWith('/dav')) {
+          apiUrl = apiUrl.substring(0, apiUrl.length - 4);
+        }
+        
+        // 即使 API 登录失败，只要 WebDAV 成功也就视为登录成功
+        try {
+          await _apiService.login(apiUrl, username, password);
+        } catch (e) {
+           logWarning('Auth', 'API 登录失败: $e');
+        }
+
         logInfo('Auth', '登录成功: $username');
         if (rememberMe) {
           await _saveCredentials(url, username, password, autoLogin);
@@ -112,5 +131,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
 // 暴露 AuthNotifier
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
   final webDavService = ref.watch(webDavServiceProvider);
-  return AuthNotifier(webDavService);
+  final apiService = ref.watch(openListApiServiceProvider);
+  return AuthNotifier(webDavService, apiService);
 });

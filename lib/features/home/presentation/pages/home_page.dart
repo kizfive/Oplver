@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -16,6 +17,8 @@ import 'package:openlist_viewer/features/auth/data/auth_provider.dart';
 import 'package:openlist_viewer/features/files/presentation/widgets/video_thumbnail_image.dart';
 import 'package:openlist_viewer/features/files/data/pdf_progress_provider.dart';
 import 'package:openlist_viewer/features/files/application/folder_analytics_service.dart';
+import 'package:openlist_viewer/features/manga/data/manga_image_provider.dart';
+import 'package:openlist_viewer/features/manga/application/manga_service.dart';
 
 // Local provider controlling the frequent-folders layout on HomePage only
 // (removed: layout toggle button uses global view mode now)
@@ -412,7 +415,7 @@ class _HistoryCard extends ConsumerWidget {
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
-                      p.basename(item.path),
+                      item.title ?? p.basename(item.path),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -422,7 +425,7 @@ class _HistoryCard extends ConsumerWidget {
                 ],
               ),
               const SizedBox(height: 2),
-              if (item.type == FileType.video || item.type == FileType.pdf)
+              if (item.type == FileType.video || item.type == FileType.pdf || item.type == FileType.manga)
                 Padding(
                   padding: const EdgeInsets.only(right: 0.0),
                   child: _buildProgress(ref, context),
@@ -519,6 +522,39 @@ class _HistoryCard extends ConsumerWidget {
     final webDavService = ref.read(webDavServiceProvider);
     if (!webDavService.isConnected) return;
 
+    if (item.type == FileType.manga) {
+       // 处理漫画点击：先显示加载中，然后获取详情并跳转
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (c) => const Center(child: CircularProgressIndicator()),
+      );
+      
+      try {
+        final mangaService = ref.read(mangaServiceProvider);
+        final manga = await mangaService.getMangaDetail(item.path);
+        
+        if (context.mounted) {
+          Navigator.of(context, rootNavigator: true).pop(); // 关闭loading
+          if (manga != null) {
+            context.push('/manga/reader', extra: manga);
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('无法加载漫画信息')),
+            );
+          }
+        }
+      } catch (e) {
+         if (context.mounted) {
+          Navigator.of(context, rootNavigator: true).pop();
+          ScaffoldMessenger.of(context).showSnackBar(
+             SnackBar(content: Text('打开漫画失败: $e')),
+          );
+         }
+      }
+      return; 
+    }
+
     if (item.type == FileType.video) {
       context.push('/video?path=${Uri.encodeComponent(item.path)}');
     } else if (item.type == FileType.pdf) {
@@ -586,12 +622,55 @@ class _HistoryCard extends ConsumerWidget {
         return Icons.image;
       case FileType.pdf:
         return Icons.picture_as_pdf;
+      case FileType.manga:
+        return Icons.menu_book;
       default:
         return Icons.insert_drive_file;
     }
   }
 
   Widget _buildProgress(WidgetRef ref, BuildContext context) {
+    if (item.type == FileType.manga) {
+      final percent = item.progress ?? 0.0;
+      final int current = item.extra?['current'] ?? 0;
+      final int total = item.extra?['total'] ?? 0;
+      
+      final pStr = '${current + 1}'; // 0-based index to 1-based page
+      final tStr = '$total';
+
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          LinearProgressIndicator(
+            value: percent,
+            backgroundColor: Theme.of(context)
+                .colorScheme
+                .onSurfaceVariant
+                .withValues(alpha: 0.2),
+            color: Theme.of(context).colorScheme.primary,
+            minHeight: 4,
+            borderRadius: BorderRadius.circular(2),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                tStr == '0' ? '' : '$pStr/$tStr',
+                style: TextStyle(
+                    fontSize: 9,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant)),
+              Text(
+                  DateFormat('MM-dd').format(item.lastOpened),
+                  style: TextStyle(
+                      fontSize: 9,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            ],
+          )
+        ],
+      );
+    }
+
     if (item.type == FileType.pdf) {
       final progressMap = ref.watch(pdfProgressProvider);
       final progressData = progressMap[item.path];
@@ -713,6 +792,40 @@ class _HistoryCard extends ConsumerWidget {
         return Center(
             child: Icon(Icons.picture_as_pdf,
                 size: 48, color: Theme.of(context).colorScheme.secondary));
+      case FileType.manga:
+        // 如果有封面路径，尝试加载
+        if (item.coverPath != null) {
+          final asyncUrl = ref.watch(resolvedMangaCoverProvider(item.coverPath!));
+          return asyncUrl.when(
+            data: (path) {
+              if (path == null) return const Icon(Icons.menu_book, color: Colors.grey);
+
+               // 检查是否为网络链接（兼容/Fallback）
+               if (path.toString().startsWith('http')) {
+                   final mangaService = ref.read(mangaServiceProvider);
+                   final headers = mangaService.getHeadersForUrl(path);
+                   return CachedNetworkImage(
+                     imageUrl: path,
+                     httpHeaders: headers,
+                     fit: BoxFit.cover,
+                     memCacheWidth: 200,
+                     errorWidget: (_,__,___) => const Icon(Icons.broken_image),
+                   );
+               }
+               
+               // 渲染本地已下载的封面
+               return Image.file(
+                 File(path),
+                 fit: BoxFit.cover,
+                 cacheWidth: 200,
+                 errorBuilder: (context, error, stackTrace) => const Icon(Icons.broken_image),
+               );
+            },
+            loading: () => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+            error: (_,__) => const Icon(Icons.menu_book),
+          );
+        }
+        return const Center(child: Icon(Icons.menu_book, size: 48, color: Colors.grey));
       default:
         return const Center(
             child: Icon(Icons.insert_drive_file, size: 48, color: Colors.grey));

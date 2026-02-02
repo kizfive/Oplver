@@ -3,6 +3,8 @@ import 'package:webdav_client/webdav_client.dart' as webdav;
 import 'package:path/path.dart' as path_utils; // 避免与 flutter path 冲突
 import 'package:lpinyin/lpinyin.dart'; // Add Pinyin support
 import '../../auth/data/auth_provider.dart';
+import '../../settings/data/general_settings_provider.dart';
+import '../../../core/network/openlist_service.dart';
 import 'file_sort_enums.dart';
 import 'sort_settings_provider.dart';
 
@@ -15,6 +17,7 @@ final pathContext = path_utils.Context(style: path_utils.Style.posix);
 class FileBrowserState {
   final String currentPath;
   final List<webdav.File> files;
+  final Map<String, String> thumbnails; // Path -> Thumbnail URL
   final bool isLoading;
   final String? error;
   final SortOption sortOption;
@@ -23,6 +26,7 @@ class FileBrowserState {
   FileBrowserState({
     this.currentPath = '/',
     this.files = const [],
+    this.thumbnails = const {},
     this.isLoading = false,
     this.error,
     this.sortOption = SortOption.name,
@@ -32,6 +36,7 @@ class FileBrowserState {
   FileBrowserState copyWith({
     String? currentPath,
     List<webdav.File>? files,
+    Map<String, String>? thumbnails,
     bool? isLoading,
     String? error,
     SortOption? sortOption,
@@ -40,6 +45,7 @@ class FileBrowserState {
     return FileBrowserState(
       currentPath: currentPath ?? this.currentPath,
       files: files ?? this.files,
+      thumbnails: thumbnails ?? this.thumbnails,
       isLoading: isLoading ?? this.isLoading,
       error: error,
       sortOption: sortOption ?? this.sortOption,
@@ -112,14 +118,64 @@ class FileBrowserNotifier extends StateNotifier<FileBrowserState> {
   }
 
   Future<void> _fetchFiles(String path) async {
-    if (_client == null) {
-      state = state.copyWith(error: '未连接服务器');
-      return;
-    }
-
     state = state.copyWith(isLoading: true, error: null);
 
     try {
+      final settings = ref.read(generalSettingsProvider);
+      
+      // 1. API 增强模式
+      if (settings.enableApiEnhancement) {
+        // 尝试使用 API 获取文件列表（包含略缩图信息）
+        final apiService = ref.read(openListApiServiceProvider);
+        if (apiService.isConnected) {
+          try {
+            final fileList = await apiService.listFiles(path);
+            if (fileList != null) {
+              // 转换 FileInfo 到 webdav.File
+              final files = fileList.content.map((info) {
+                return webdav.File(
+                  name: info.name,
+                  isDir: info.isDir,
+                  size: info.size,
+                  mTime: DateTime.tryParse(info.modified) ?? DateTime.now(),
+                  cTime: DateTime.now(), // API doesn't provide cTime usually
+                  path: pathContext.join(path, info.name),
+                );
+              }).toList();
+
+              // 提取略缩图
+              final thumbs = <String, String>{};
+              for (var info in fileList.content) {
+                if (info.thumb != null && info.thumb!.isNotEmpty) {
+                  // 保存略缩图 URL，Key 为完整路径
+                  final fullPath = pathContext.join(path, info.name);
+                  thumbs[fullPath] = info.thumb!;
+                }
+              }
+
+              _sortFiles(files, state.sortOption, state.sortOrder);
+
+              state = state.copyWith(
+                currentPath: path,
+                files: files,
+                thumbnails: thumbs,
+                isLoading: false,
+              );
+              return; // API 获取成功，直接返回
+            }
+          } catch (e) {
+            // API 失败，降级到 WebDAV
+            // debugPrint('API listing failed, falling back to WebDAV: $e');
+          }
+        }
+      }
+
+      // 2. WebDAV 模式 (默认或降级)
+      if (_client == null) {
+        state = state.copyWith(error: '未连接服务器', isLoading: false);
+        return;
+      }
+
       // 确保路径格式正确
       final fetchPath = path.endsWith('/') ? path : '$path/';
 
@@ -130,6 +186,7 @@ class FileBrowserNotifier extends StateNotifier<FileBrowserState> {
       state = state.copyWith(
         currentPath: path,
         files: list,
+        thumbnails: {}, // WebDAV 模式下没有预加载的略缩图
         isLoading: false,
       );
     } catch (e) {

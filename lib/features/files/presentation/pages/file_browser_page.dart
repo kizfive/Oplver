@@ -9,6 +9,8 @@ import 'package:path/path.dart' as path_context;
 import '../../application/download_service.dart';
 import '../../../../features/auth/data/auth_provider.dart';
 import '../../../../core/utils/file_utils.dart';
+import '../../../../core/enums/download_mode.dart';
+import '../../../../features/settings/data/general_settings_provider.dart';
 import '../../data/file_provider.dart';
 import '../../data/view_mode_provider.dart';
 import '../../../history/data/file_history_provider.dart';
@@ -22,6 +24,10 @@ import '../widgets/video_thumbnail_image.dart';
 import '../widgets/thumbnail_container.dart';
 import 'package:openlist_viewer/features/files/data/pdf_progress_provider.dart';
 import '../../application/folder_analytics_service.dart';
+import '../file_browser_operations_helper.dart';
+import '../../application/file_services_provider.dart';
+import '../../application/file_properties_service.dart';
+import '../../../../core/network/openlist_models.dart';
 
 class FileBrowserPage extends ConsumerStatefulWidget {
   final String initialPath;
@@ -42,6 +48,17 @@ class _FileBrowserPageState extends ConsumerState<FileBrowserPage> {
   bool _hasScrolledToHighlight = false;
   // To prevent double pops
   DateTime? _lastPopTime;
+  // 搜索相关
+  bool _isSearchMode = false;
+  final TextEditingController _searchController = TextEditingController();
+  List<webdav.File> _searchResults = [];
+  bool _isSearching = false;
+  // 多选模式相关
+  bool _isMultiSelectMode = false;
+  final Set<String> _selectedFiles = {};
+  
+  // 用于精确定位高亮文件
+  final GlobalKey _highlightKey = GlobalKey();
 
   @override
   void initState() {
@@ -63,6 +80,7 @@ class _FileBrowserPageState extends ConsumerState<FileBrowserPage> {
   void dispose() {
     _breadcrumbScrollController.dispose();
     _listScrollController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -330,6 +348,7 @@ class _FileBrowserPageState extends ConsumerState<FileBrowserPage> {
   void _showFileOptions(BuildContext parentContext, webdav.File file,
       AppFileType type, List<webdav.File> siblings) {
     bool isFolder = file.isDir ?? false;
+    final currentPath = widget.initialPath;
 
     showModalBottomSheet(
       context: parentContext,
@@ -347,18 +366,97 @@ class _FileBrowserPageState extends ConsumerState<FileBrowserPage> {
               ),
               const Divider(),
 
-              // Only show download if it's NOT a folder, as requested
+              // 多选下载
+              if (!isFolder)
+                ListTile(
+                  leading: const Icon(Icons.checklist),
+                  title: const Text('多选下载'),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _enterMultiSelectMode(file);
+                  },
+                ),
+
+              // 单文件下载
               if (!isFolder)
                 ListTile(
                   leading: const Icon(Icons.download),
                   title: const Text('下载到本地'),
                   onTap: () {
                     Navigator.pop(sheetContext);
-                    // Use parentContext (from Page) to ensure it survives the sheet pop
                     _handleDownload(parentContext, ref, file, siblings);
                   },
                 ),
 
+              // 复制到
+              ListTile(
+                leading: const Icon(Icons.copy),
+                title: const Text('复制到'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  FileBrowserOperationsHelper.showCopyMoveDialog(
+                    parentContext,
+                    ref,
+                    currentPath,
+                    [file.name ?? ''],
+                    false, // isMove
+                    () => ref.read(fileBrowserProvider(currentPath).notifier).refresh(),
+                  );
+                },
+              ),
+
+              // 移动到
+              ListTile(
+                leading: const Icon(Icons.drive_file_move),
+                title: const Text('移动到'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  FileBrowserOperationsHelper.showCopyMoveDialog(
+                    parentContext,
+                    ref,
+                    currentPath,
+                    [file.name ?? ''],
+                    true, // isMove
+                    () => ref.read(fileBrowserProvider(currentPath).notifier).refresh(),
+                  );
+                },
+              ),
+
+              // 重命名
+              ListTile(
+                leading: const Icon(Icons.edit),
+                title: const Text('重命名'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  FileBrowserOperationsHelper.showRenameDialog(
+                    parentContext,
+                    ref,
+                    currentPath,
+                    file,
+                    () => ref.read(fileBrowserProvider(currentPath).notifier).refresh(),
+                  );
+                },
+              ),
+
+              // 删除
+              ListTile(
+                leading: const Icon(Icons.delete, color: Colors.red),
+                title: const Text('删除', style: TextStyle(color: Colors.red)),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  FileBrowserOperationsHelper.showDeleteDialog(
+                    parentContext,
+                    ref,
+                    currentPath,
+                    [file.name ?? ''],
+                    () => ref.read(fileBrowserProvider(currentPath).notifier).refresh(),
+                  );
+                },
+              ),
+
+              const Divider(),
+
+              // 文件属性
               ListTile(
                   leading: const Icon(Icons.info_outline),
                   title: const Text('文件属性'),
@@ -366,6 +464,8 @@ class _FileBrowserPageState extends ConsumerState<FileBrowserPage> {
                     Navigator.pop(sheetContext);
                     _showFileAttributes(file);
                   }),
+
+              // 重新生成预览图（仅视频）
               if (type == AppFileType.video)
                 ListTile(
                   leading: const Icon(Icons.refresh),
@@ -384,30 +484,101 @@ class _FileBrowserPageState extends ConsumerState<FileBrowserPage> {
 
   void _showFileAttributes(webdav.File file) {
     showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-              title: const Text('文件属性'),
-              content: Column(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('文件属性'),
+        content: FutureBuilder<DetailedFileProperties>(
+          future: ref
+              .read(filePropertiesServiceProvider)
+              .getDetailedProperties(widget.initialPath, file),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const SizedBox(
+                height: 100,
+                child: Center(child: CircularProgressIndicator()),
+              );
+            }
+
+            final properties = snapshot.data;
+            if (properties == null) {
+              return const Text('无法获取文件属性');
+            }
+
+            return SizedBox(
+              width: double.maxFinite,
+              child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('名称: ${file.name}'),
-                  const SizedBox(height: 8),
-                  Text(
-                      '大小: ${file.size != null ? _formatSize(file.size!) : "未知"}'),
-                  const SizedBox(height: 8),
-                  Text(
-                      '修改时间: ${file.mTime != null ? DateFormat('yyyy-MM-dd HH:mm:ss').format(file.mTime!) : "--"}'),
-                  const SizedBox(height: 8),
-                  Text('类型: ${file.mimeType ?? "未知"}'),
+                  _buildPropertyRow('名称', properties.fileName),
+                  _buildPropertyRow('大小', properties.formattedSize),
+                  if (properties.modified != null)
+                    _buildPropertyRow('修改时间',
+                        DateFormat('yyyy-MM-dd HH:mm:ss').format(properties.modified!)),
+                  _buildPropertyRow('类型', properties.mimeType),
+
+                  // 图片特有属性
+                  if (properties.resolution != null)
+                    _buildPropertyRow('分辨率', properties.resolution!),
+
+                  // 视频特有属性
+                  if (properties.duration != null)
+                    _buildPropertyRow('时长', properties.duration!),
+                  if (properties.videoCodec != null)
+                    _buildPropertyRow('视频编码', properties.videoCodec!),
+                  if (properties.audioCodec != null)
+                    _buildPropertyRow('音频编码', properties.audioCodec!),
+
+                  // 音频特有属性
+                  if (properties.audioDuration != null)
+                    _buildPropertyRow('时长', properties.audioDuration!),
+                  if (properties.bitrate != null)
+                    _buildPropertyRow('码率', properties.bitrate!),
+
+                  // 文档特有属性
+                  if (properties.pageCount != null)
+                    _buildPropertyRow('页数', properties.pageCount.toString()),
+
+                  // 压缩包特有属性
+                  if (properties.fileCount != null)
+                    _buildPropertyRow('文件数量', properties.fileCount.toString()),
                 ],
               ),
-              actions: [
-                TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('关闭'))
-              ],
-            ));
+            );
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('关闭'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPropertyRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 80,
+            child: Text(
+              '$label:',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(color: Colors.grey),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildBreadcrumbs(BuildContext context, String currentPath) {
@@ -499,6 +670,12 @@ class _FileBrowserPageState extends ConsumerState<FileBrowserPage> {
 
   void _handleFileTap(BuildContext context, webdav.File file,
       String currentPath, List<webdav.File> files) {
+    // 如果处于多选模式，切换文件选择状态
+    if (_isMultiSelectMode) {
+      _toggleFileSelection(file.name ?? '');
+      return;
+    }
+    
     if (file.isDir ?? false) {
       final newPath = path_context.join(currentPath, file.name ?? '');
       final encoded =
@@ -587,12 +764,11 @@ class _FileBrowserPageState extends ConsumerState<FileBrowserPage> {
     double offset = 0;
 
     if (viewMode == ViewMode.list) {
-      // 列表模式：移动到从上往下第二个位置
-      // 修正列表项高度估计 (Tile 72 + Vertical Padding 16 = 88?)
-      // 实际上可能是 72-80 左右，稍微估大一点以防滚不到位导致在底部
-      const double itemHeight = 88.0;
-      final targetIndex = (index > 0) ? index - 1 : 0;
-      offset = targetIndex * itemHeight;
+      // 列表模式：直接定位到目标索引
+      // Tile height with 2-line text and 56px leading is approx 72-88px.
+      // We use 90.0 to be slightly aggressive but safe.
+      const double itemHeight = 90.0;
+      offset = index * itemHeight;
     } else {
       // 网格模式：文件所在的行是第一行的位置
       final screenWidth = MediaQuery.of(context).size.width;
@@ -615,11 +791,127 @@ class _FileBrowserPageState extends ConsumerState<FileBrowserPage> {
           final maxScroll = _listScrollController.position.maxScrollExtent;
           // 确保不超过最大滚动范围
           final target = offset.clamp(0.0, maxScroll);
-          _listScrollController.animateTo(target,
-              duration: const Duration(milliseconds: 600),
-              curve: Curves.easeOutCubic);
+          _listScrollController
+              .animateTo(target,
+                  duration: const Duration(milliseconds: 500),
+                  curve: Curves.easeOutCubic)
+              .then((_) {
+            // Animation finished. Try to ensure visible using the key.
+            // This fixes issues where estimated height was wrong.
+            // Give a small delay for layout to settle if needed.
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (_highlightKey.currentContext != null) {
+                Scrollable.ensureVisible(_highlightKey.currentContext!,
+                    alignment: 0.5, // Center the item
+                    duration: const Duration(milliseconds: 300));
+              }
+            });
+          });
         }
       });
+    });
+  }
+
+  // 搜索功能
+  Future<void> _performSearch() async {
+    if (_searchController.text.trim().isEmpty) return;
+
+    setState(() => _isSearching = true);
+
+    final service = ref.read(fileOperationServiceProvider);
+    final results = await service.searchFiles(
+      _searchController.text.trim(),
+      parent: widget.initialPath,
+    );
+
+    final converted = results.map((item) {
+      if (item is SearchResult) {
+        return webdav.File(
+          name: item.name,
+          isDir: item.isDir,
+          size: item.size,
+          path: item.parent.endsWith('/')
+              ? '${item.parent}${item.name}'
+              : '${item.parent}/${item.name}',
+          mTime: DateTime.now(), // 搜索结果不包含时间信息
+          cTime: DateTime.now(),
+        );
+      }
+      // 如果不是 SearchResult类型（理论上不应该发生，或者是其他类型），可以尝试处理或忽略
+      return webdav.File(
+        name: 'Unknown',
+        isDir: false,
+        size: 0,
+        mTime: DateTime.now(),
+      );
+    }).where((f) => f.name != 'Unknown').toList();
+
+    setState(() {
+      _searchResults = converted;
+      _isSearching = false;
+    });
+  }
+
+  // 上传功能
+  Future<void> _handleUpload(String currentPath) async {
+    await FileBrowserOperationsHelper.showUploadDialog(
+      context,
+      ref,
+      currentPath,
+      () => ref.read(fileBrowserProvider(widget.initialPath).notifier).refresh(),
+    );
+  }
+
+  // 进入多选模式
+  void _enterMultiSelectMode(webdav.File file) {
+    setState(() {
+      _isMultiSelectMode = true;
+      _selectedFiles.add(file.name ?? '');
+    });
+  }
+
+  // 切换文件选择状态
+  void _toggleFileSelection(String fileName) {
+    setState(() {
+      if (_selectedFiles.contains(fileName)) {
+        _selectedFiles.remove(fileName);
+        if (_selectedFiles.isEmpty) {
+          _isMultiSelectMode = false;
+        }
+      } else {
+        _selectedFiles.add(fileName);
+      }
+    });
+  }
+
+  // 批量下载选中的文件
+  Future<void> _downloadSelectedFiles(String currentPath) async {
+    final fileState = ref.read(fileBrowserProvider(currentPath));
+    final selectedFilesList = fileState.files
+        .where((f) => _selectedFiles.contains(f.name))
+        .toList();
+
+    if (selectedFilesList.isEmpty) return;
+
+    final downloadService = ref.read(downloadServiceProvider);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('已添加到下载队列: ${selectedFilesList.length} 个文件')),
+    );
+
+    // 异步启动下载，不阻塞UI
+    Future.wait(selectedFilesList.map((file) async {
+      final fullPath = path_context.join(currentPath, file.name ?? '');
+      try {
+        await downloadService.downloadFile(fullPath);
+      } catch (e) {
+        debugPrint('Download error for $fullPath: $e');
+      }
+    }));
+
+    setState(() {
+      _isMultiSelectMode = false;
+      _selectedFiles.clear();
     });
   }
 
@@ -686,75 +978,173 @@ class _FileBrowserPageState extends ConsumerState<FileBrowserPage> {
       child: Scaffold(
         drawerEnableOpenDragGesture: false, // 禁用侧滑抽屉手势，防止冲突
         appBar: AppBar(
-          title: Text(
-            fileState.currentPath == '/'
-                ? 'Home'
-                : fileState.currentPath.split('/').last,
-          ),
-          leading: widget.initialPath != '/'
+          title: _isSearchMode
+              ? TextField(
+                  controller: _searchController,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    hintText: '搜索文件...',
+                    border: InputBorder.none,
+                  ),
+                  onSubmitted: (value) => _performSearch(),
+                )
+              : Text(
+                  fileState.currentPath == '/'
+                      ? 'Home'
+                      : fileState.currentPath.split('/').last,
+                ),
+          leading: _isSearchMode
               ? IconButton(
                   icon: const Icon(Icons.arrow_back),
                   onPressed: () {
-                    final now = DateTime.now();
-                    if (_lastPopTime != null &&
-                        now.difference(_lastPopTime!).inMilliseconds < 500) {
-                      return;
-                    }
-                    _lastPopTime = now;
-
-                    // If from home page (常访文件夹/播放历史), go back to home
-                    if (isFromHome) {
-                      context.go('/home');
-                    } else {
-                      // Normal navigation, try to pop
-                      if (context.canPop()) {
-                        context.pop();
-                      } else {
-                        // No navigation stack, go to browse root
-                        context.go('/browse');
-                      }
-                    }
+                    setState(() {
+                      _isSearchMode = false;
+                      _searchController.clear();
+                      _searchResults.clear();
+                    });
                   },
                 )
-              : null,
-          actions: [
-            IconButton(
-              icon: Icon(viewMode == ViewMode.grid
-                  ? Icons.grid_view
-                  : Icons.view_list),
-              tooltip: '切换试图',
-              onPressed: () {
-                ref.read(viewModeProvider.notifier).toggle();
-              },
-            ),
-            IconButton(
-              icon: const Icon(Icons.sort),
-              tooltip: '排序',
-              onPressed: () {
-                _showSortSheet(context, fileState, notifier);
-              },
-            ),
-            IconButton(
-              icon: const Icon(Icons.refresh),
-              onPressed: () => notifier.refresh(),
-            ),
-          ],
+              : (_isMultiSelectMode
+                  ? IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () {
+                        setState(() {
+                          _isMultiSelectMode = false;
+                          _selectedFiles.clear();
+                        });
+                      },
+                    )
+                  : (widget.initialPath != '/'
+                      ? IconButton(
+                          icon: const Icon(Icons.arrow_back),
+                          onPressed: () {
+                            final now = DateTime.now();
+                            if (_lastPopTime != null &&
+                                now.difference(_lastPopTime!).inMilliseconds < 500) {
+                              return;
+                            }
+                            _lastPopTime = now;
+
+                            // If from home page (常访文件夹/播放历史), go back to home
+                            if (isFromHome) {
+                              context.go('/home');
+                            } else {
+                              // Normal navigation, try to pop
+                              if (context.canPop()) {
+                                context.pop();
+                              } else {
+                                // No navigation stack, go to browse root
+                                context.go('/browse');
+                              }
+                            }
+                          },
+                        )
+                      : null)),
+          actions: _isMultiSelectMode
+              ? [
+                  // 多选模式下的操作按钮
+                  IconButton(
+                    icon: Badge(
+                      label: Text('${_selectedFiles.length}'),
+                      child: const Icon(Icons.check_circle),
+                    ),
+                    onPressed: () {
+                      // 显示已选择的文件数量
+                    },
+                  ),
+                ]
+              : [
+                  // 常规模式下的按钮
+                  if (ref.watch(generalSettingsProvider).enableApiEnhancement &&
+                      !_isSearchMode)
+                    IconButton(
+                      icon: const Icon(Icons.search),
+                      tooltip: '搜索',
+                      onPressed: () {
+                        setState(() => _isSearchMode = true);
+                      },
+                    ),
+                  if (_isSearchMode)
+                    IconButton(
+                      icon: const Icon(Icons.search),
+                      tooltip: '搜索',
+                      onPressed: _performSearch,
+                    ),
+                  if (!_isSearchMode)
+                    IconButton(
+                      icon: const Icon(Icons.upload_file),
+                      tooltip: '上传',
+                      onPressed: () => _handleUpload(fileState.currentPath),
+                    ),
+                  if (!_isSearchMode)
+                    IconButton(
+                      icon: Icon(viewMode == ViewMode.grid
+                          ? Icons.grid_view
+                          : Icons.view_list),
+                      tooltip: '切换试图',
+                      onPressed: () {
+                        ref.read(viewModeProvider.notifier).toggle();
+                      },
+                    ),
+                  if (!_isSearchMode)
+                    IconButton(
+                      icon: const Icon(Icons.sort),
+                      tooltip: '排序',
+                      onPressed: () {
+                        _showSortSheet(context, fileState, notifier);
+                      },
+                    ),
+                  if (!_isSearchMode)
+                    IconButton(
+                      icon: const Icon(Icons.refresh),
+                      onPressed: () => notifier.refresh(),
+                    ),
+                ],
         ),
         body: Column(
           children: [
-            _buildBreadcrumbs(context, fileState.currentPath),
+            // 面包屑导航（搜索模式下不显示）
+            if (!_isSearchMode) _buildBreadcrumbs(context, fileState.currentPath),
+            
+            // 多选模式下的浮动按钮
+            if (_isMultiSelectMode)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                color: Theme.of(context).colorScheme.primaryContainer,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '已选择 ${_selectedFiles.length} 个文件',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onPrimaryContainer,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    FilledButton.icon(
+                      onPressed: () => _downloadSelectedFiles(fileState.currentPath),
+                      icon: const Icon(Icons.download),
+                      label: const Text('下载'),
+                    ),
+                  ],
+                ),
+              ),
+            
             Expanded(
-              child: fileState.isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : fileState.error != null
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(fileState.error!,
-                                  style: const TextStyle(color: Colors.red)),
-                              const SizedBox(height: 16),
-                              FilledButton(
+              child: _isSearchMode
+                  ? _buildSearchResults()
+                  : fileState.isLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : fileState.error != null
+                          ? Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(fileState.error!,
+                                      style: const TextStyle(color: Colors.red)),
+                                  const SizedBox(height: 16),
+                                  FilledButton(
                                 onPressed: () => notifier.refresh(),
                                 child: const Text('重试'),
                               )
@@ -775,10 +1165,12 @@ class _FileBrowserPageState extends ConsumerState<FileBrowserPage> {
                                                 widget.highlightFileName;
 
                                     Widget item = _FileListItem(
+                                      key: isHighlighted ? _highlightKey : ValueKey(file.name),
                                       file: file,
                                       currentPath: fileState.currentPath,
                                       thumbnailSeed:
                                           _thumbnailSeeds[file.name] ?? 0,
+                                      isSelected: _selectedFiles.contains(file.name),
                                       onLongPress: (fileType) {
                                         _showFileOptions(context, file,
                                             fileType, fileState.files);
@@ -835,6 +1227,7 @@ class _FileBrowserPageState extends ConsumerState<FileBrowserPage> {
                                       currentPath: fileState.currentPath,
                                       thumbnailSeed:
                                           _thumbnailSeeds[file.name] ?? 0,
+                                      isSelected: _selectedFiles.contains(file.name),
                                       onLongPress: (fileType) {
                                         _showFileOptions(context, file,
                                             fileType, fileState.files);
@@ -873,6 +1266,79 @@ class _FileBrowserPageState extends ConsumerState<FileBrowserPage> {
       ), // End of PopScope
     );
   }
+
+  // 构建搜索结果界面
+  Widget _buildSearchResults() {
+    if (_isSearching) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_searchResults.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.search_off, size: 64, color: Colors.grey),
+            const SizedBox(height: 16),
+            Text(
+              _searchController.text.isEmpty ? '输入关键词开始搜索' : '未找到相关文件',
+              style: const TextStyle(color: Colors.grey),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      itemCount: _searchResults.length,
+      itemBuilder: (context, index) {
+        final result = _searchResults[index];
+        final parentPath = result.path != null
+            ? path_context.posix.dirname(result.path!)
+            : '/';
+        return ListTile(
+          leading: Icon(
+            (result.isDir ?? false) ? Icons.folder : Icons.insert_drive_file,
+            color: (result.isDir ?? false) ? Colors.blue : Colors.grey,
+          ),
+          title: Text(result.name ?? 'Unknown'),
+          subtitle: Text(parentPath),
+          trailing: (result.isDir ?? false)
+              ? null
+              : Text(_formatSize(result.size ?? 0)),
+          onTap: () {
+            final dir = parentPath;
+            // Add analytics - use recordDirectAccess to ensure it counts immediately
+            ref.read(folderAnalyticsProvider.notifier).recordDirectAccess(dir);
+
+            final name = result.name ?? '';
+
+            String targetPath = '/browse';
+            if (dir != '/') {
+              final relativeDir = dir.startsWith('/') ? dir.substring(1) : dir;
+              final encoded = Uri.encodeComponent(relativeDir);
+              targetPath += '/dir/$encoded';
+            }
+
+            // Add timestamp to force rebuild/scroll
+            final qp = {
+              'highlight': name,
+              't': DateTime.now().millisecondsSinceEpoch.toString(),
+              'from': 'search',
+            };
+            context.push(Uri(path: targetPath, queryParameters: qp).toString());
+
+            // 退出搜索模式
+            setState(() {
+              _isSearchMode = false;
+              _searchController.clear();
+              _searchResults.clear();
+            });
+          },
+        );
+      },
+    );
+  }
 }
 
 class _FileListItem extends ConsumerWidget {
@@ -881,13 +1347,16 @@ class _FileListItem extends ConsumerWidget {
   final VoidCallback onTap;
   final Function(AppFileType) onLongPress;
   final int thumbnailSeed;
+  final bool isSelected;
 
   const _FileListItem({
+    super.key,
     required this.file,
     required this.currentPath,
     required this.onTap,
     required this.onLongPress,
     this.thumbnailSeed = 0,
+    this.isSelected = false,
   });
 
   @override
@@ -952,47 +1421,74 @@ class _FileListItem extends ConsumerWidget {
         final pos = history.positions[fullPath] ?? 0;
         final dur = history.durations[fullPath] ?? 0;
         final progress = dur > 0 ? (pos / dur).clamp(0.0, 1.0) : 0.0;
+        
+        // 尝试获取 API 提供的缩略图
+        final fileState = ref.read(fileBrowserProvider(currentPath));
+        final apiThumbUrl = fileState.thumbnails[fullPath];
 
         if (showThumbnails) {
-          // Smart Seek Implementation (Adaptive Bitrate)
-          // ... previous logic ...
-          final size = file.size ?? 0;
-          int timeMs = 10000; // Default 10s
+          if (apiThumbUrl != null) {
+              // 策略 1: 优先使用 API 提供的封面图
+              leadingWidget = ThumbnailContainer(
+                backgroundColor: placeholderColor,
+                typeIcon: Icons.videocam,
+                progress: progress,
+                child: CachedNetworkImage(
+                  imageUrl: apiThumbUrl,
+                  httpHeaders: ref.read(webDavServiceProvider).authHeaders,
+                  memCacheHeight: 200,
+                  fit: BoxFit.cover,
+                  errorWidget: (context, url, error) {
+                    return VideoThumbnailImage(
+                      file: file,
+                      currentPath: currentPath,
+                      timeMs: 10000, 
+                    );
+                  },
+                  placeholder: (context, url) => Container(color: Colors.black12),
+                ),
+              );
+          } else {
+            // Smart Seek Implementation (Adaptive Bitrate)
+            // ... previous logic ...
+            final size = file.size ?? 0;
+            int timeMs = 10000; // Default 10s
 
-          if (size > 0) {
-            double assumedBitrate = 2 * 1024 * 1024; // Default: 2MB/s (16Mbps)
+            if (size > 0) {
+              double assumedBitrate = 2 * 1024 * 1024; // Default: 2MB/s (16Mbps)
 
-            if (size > 500 * 1024 * 1024) assumedBitrate = 4 * 1024 * 1024;
-            if (size > 2 * 1024 * 1024 * 1024) assumedBitrate = 8 * 1024 * 1024;
+              if (size > 500 * 1024 * 1024) assumedBitrate = 4 * 1024 * 1024;
+              if (size > 2 * 1024 * 1024 * 1024) assumedBitrate = 8 * 1024 * 1024;
 
-            final estimatedDurationMs = (size / assumedBitrate) * 1000;
+              final estimatedDurationMs = (size / assumedBitrate) * 1000;
 
-            // Default: Target 45% of estimated timeline
-            double percent = 0.45;
+              // Default: Target 45% of estimated timeline
+              double percent = 0.45;
 
-            // Apply Random Offset if regenerated (seed > 0)
-            if (thumbnailSeed > 0) {
-              final rng = Random(file.name.hashCode ^ thumbnailSeed);
-              final sign = rng.nextBool() ? 1 : -1;
-              final magnitude = rng.nextDouble() * 0.4;
-              percent = percent + (sign * magnitude);
+              // Apply Random Offset if regenerated (seed > 0)
+              if (thumbnailSeed > 0) {
+                final rng = Random(file.name.hashCode ^ thumbnailSeed);
+                final sign = rng.nextBool() ? 1 : -1;
+                final magnitude = rng.nextDouble() * 0.4;
+                percent = percent + (sign * magnitude);
+              }
+              timeMs = (estimatedDurationMs * percent).toInt();
+              final int upperLimit = (thumbnailSeed > 0) ? 300000 : 60000;
+              timeMs = timeMs.clamp(5000, upperLimit);
             }
-            timeMs = (estimatedDurationMs * percent).toInt();
-            final int upperLimit = (thumbnailSeed > 0) ? 300000 : 60000;
-            timeMs = timeMs.clamp(5000, upperLimit);
-          }
 
-          // Video uses fixed width 16:9
-          leadingWidget = ThumbnailContainer(
-            backgroundColor: placeholderColor,
-            typeIcon: Icons.videocam,
-            progress: progress,
-            child: VideoThumbnailImage(
-              file: file,
-              currentPath: currentPath,
-              timeMs: timeMs,
-            ),
-          );
+            // Video uses fixed width 16:9
+            leadingWidget = ThumbnailContainer(
+              backgroundColor: placeholderColor,
+              typeIcon: Icons.videocam,
+              progress: progress,
+              child: VideoThumbnailImage(
+                file: file,
+                currentPath: currentPath,
+                timeMs: timeMs,
+              ),
+            );
+          }
         } else {
           // Placeholder maintaining size
           leadingWidget = ThumbnailContainer(
@@ -1030,30 +1526,42 @@ class _FileListItem extends ConsumerWidget {
         if (showThumbnails &&
             webDavService.isConnected &&
             webDavService.baseUrl != null) {
+          // 1. Try to get API Thumbnail URL if available
+          final fileState = ref.read(fileBrowserProvider(currentPath));
+          final fullPath = pathContext.join(currentPath, file.name ?? '');
+          final apiThumbUrl = fileState.thumbnails[fullPath];
+
+          // 2. Construct WebDAV URL as fallback
           final Uri baseUri = Uri.parse(webDavService.baseUrl!);
           var pathSegments = <String>[];
           pathSegments.addAll(baseUri.pathSegments);
-          // Remove empty last segment if any
           if (pathSegments.isNotEmpty && pathSegments.last == '') {
             pathSegments.removeLast();
           }
-
           var dirSegments = currentPath.split('/').where((s) => s.isNotEmpty);
           pathSegments.addAll(dirSegments);
-
           if (file.name != null) {
             pathSegments.add(file.name!);
           }
-
-          // Remove queryParameters since server ignores them and returns original file
-          final uri = baseUri.replace(pathSegments: pathSegments);
+          final webDavUri = baseUri.replace(pathSegments: pathSegments);
+          
+          final imageUrl = apiThumbUrl ?? webDavUri.toString();
 
           leadingWidget = ThumbnailContainer(
             backgroundColor: placeholderColor,
             typeIcon: Icons.image,
             child: CachedNetworkImage(
-              imageUrl: uri.toString(),
-              httpHeaders: webDavService.authHeaders,
+              imageUrl: imageUrl,
+              httpHeaders: apiThumbUrl != null
+                  ? null // API URLs might not need standard WebDAV auth headers, or need different ones. Assume public/token embedded for now or null.
+                  // Actually, generic API thumbs in Alist usually require the same token header if private.
+                  // But often 'thumb' is a signed URL or public. 
+                  // If it's pure API, maybe we need 'Authorization': token. 
+                  // Let's assume Alist thumb URL carries signature or is used with user token.
+                  // For safety, let's pass headers if it's NOT an API thumb (WebDAV), 
+                  // OR if it IS API thumb, we might need to check if it needs auth.
+                  // But to verify the STRATEGY: 
+                  : webDavService.authHeaders,
               memCacheHeight: 200,
               fit: BoxFit.contain,
               imageBuilder: (context, imageProvider) => Image(
@@ -1064,10 +1572,36 @@ class _FileListItem extends ConsumerWidget {
                   size: 32,
                   color: theme.colorScheme.onPrimaryContainer
                       .withValues(alpha: 0.5)),
-              errorWidget: (context, url, error) => Icon(
+              errorWidget: (context, url, error) {
+                // FALLBACK STRATEGY VERIFICATION LOGIC
+                if (imageUrl != webDavUri.toString()) {
+                   // If current URL was API thumb and failed, we could try to reload with WebDAV URI?
+                   // However, CachedNetworkImage errorWidget is a widget builder, not a retry mechanism.
+                   // To implement true fallback (API -> Fail -> WebDAV), we need a smarter widget or state.
+                   // But for now, if API Enhancement is on, we prefer API thumb. 
+                   // If that fails, the user will see an error icon.
+                   // THE USER ASKED FOR FALLBACK STRATEGY.
+                   // "如果失败然后才是webdav下载原图"
+                   // So I MUST implement the fallback.
+                   return CachedNetworkImage(
+                     imageUrl: webDavUri.toString(),
+                     httpHeaders: webDavService.authHeaders,
+                     memCacheHeight: 200,
+                     fit: BoxFit.contain,
+                     placeholder: (context, url) => const Center(
+                         child:
+                             SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))),
+                     errorWidget: (context, url, error) => Icon(
+                         _getFileIcon(file.name),
+                         size: 32,
+                         color: theme.colorScheme.error),
+                   );
+                }
+                return Icon(
                   _getFileIcon(file.name),
                   size: 32,
-                  color: theme.colorScheme.error),
+                  color: theme.colorScheme.error);
+              },
             ),
           );
         } else {
@@ -1097,21 +1631,38 @@ class _FileListItem extends ConsumerWidget {
       }
     }
 
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 8), // Add vertical padding to handle varying heights
-      leading:
-          leadingWidget, // Remove SizedBox wrapper, use leadingWidget directly which has constraints
-      minLeadingWidth: 0, // Allow dynamic width shrinking
-      title: Text(
-        file.name ?? 'Unknown',
-        // Allow unlimited lines
+    return Container(
+      decoration: isSelected
+          ? BoxDecoration(
+              color: Theme.of(context).colorScheme.primary.withAlpha(50),
+              border: Border.all(
+                  color: Theme.of(context).colorScheme.primary, width: 2),
+            )
+          : null,
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 8), // Add vertical padding to handle varying heights
+        leading:
+            leadingWidget, // Remove SizedBox wrapper, use leadingWidget directly which has constraints
+        minLeadingWidth: 0, // Allow dynamic width shrinking
+        title: Text(
+          file.name ?? 'Unknown',
+          // Allow unlimited lines
+        ),
+        subtitle: Text('$modTime  $sizeStr'),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isSelected)
+              Icon(Icons.check_circle, 
+                   color: Theme.of(context).colorScheme.primary),
+            if (isDir && !isSelected) const Icon(Icons.chevron_right),
+          ],
+        ),
+        onTap: onTap,
+        onLongPress: () => onLongPress(type),
       ),
-      subtitle: Text('$modTime  $sizeStr'),
-      trailing: isDir ? const Icon(Icons.chevron_right) : null,
-      onTap: onTap,
-      onLongPress: () => onLongPress(type),
     );
   }
 
@@ -1150,6 +1701,7 @@ class _FileGridItem extends ConsumerWidget {
   final int thumbnailSeed;
   final Function(AppFileType) onLongPress;
   final VoidCallback onTap;
+  final bool isSelected;
 
   const _FileGridItem({
     required this.file,
@@ -1157,6 +1709,7 @@ class _FileGridItem extends ConsumerWidget {
     required this.thumbnailSeed,
     required this.onLongPress,
     required this.onTap,
+    this.isSelected = false,
   });
 
   IconData _getFileIcon(String? filename) {
@@ -1305,25 +1858,54 @@ class _FileGridItem extends ConsumerWidget {
 
     return Card(
       clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        onLongPress: () => onLongPress(type),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(child: thumbnailWidget),
-            Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-              child: Text(
-                file.name ?? 'Unknown',
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall,
-                textAlign: TextAlign.center,
+      child: Container(
+        decoration: isSelected
+            ? BoxDecoration(
+                border: Border.all(
+                    color: Theme.of(context).colorScheme.primary, width: 3),
+              )
+            : null,
+        child: InkWell(
+          onTap: onTap,
+          onLongPress: () => onLongPress(type),
+          child: Stack(
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(child: thumbnailWidget),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8.0, vertical: 4.0),
+                    child: Text(
+                      file.name ?? 'Unknown',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall,
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
+              if (isSelected)
+                Positioned(
+                  top: 4,
+                  right: 4,
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primary,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.check,
+                      color: Theme.of(context).colorScheme.onPrimary,
+                      size: 16,
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );

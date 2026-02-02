@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 import 'dart:io';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/theme_provider.dart';
+import '../../../../core/enums/download_mode.dart';
 import '../../../settings/data/video_settings_provider.dart';
 import '../../../settings/data/general_settings_provider.dart';
 import '../../../../core/services/log_service.dart';
