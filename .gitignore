@@ -84,6 +84,6 @@ app_runtime.log
 *.sqlite
 *.sqlite3
 
-需求添加文档.txt
+*.txt
 
 *.example
