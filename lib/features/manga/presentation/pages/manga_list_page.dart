@@ -5,6 +5,7 @@ import '../../../settings/data/general_settings_provider.dart';
 import '../../data/manga_provider.dart';
 import '../../../files/presentation/widgets/folder_selector_dialog.dart';
 import '../widgets/manga_card_widget.dart';
+import '../../../../core/i18n/app_localizations.dart';
 
 /// 漫画列表页面
 class MangaListPage extends ConsumerStatefulWidget {
@@ -30,12 +31,13 @@ class _MangaListPageState extends ConsumerState<MangaListPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final settings = ref.watch(generalSettingsProvider);
     final mangaState = ref.watch(mangaNotifierProvider);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('漫画'),
+        title: Text(l10n.tr('manga')),
         actions: [
           if (mangaState.selectedRootPath != null)
             IconButton(
@@ -43,12 +45,12 @@ class _MangaListPageState extends ConsumerState<MangaListPage> {
               onPressed: () {
                 ref.read(mangaNotifierProvider.notifier).refresh();
               },
-              tooltip: '刷新',
+              tooltip: l10n.tr('refresh'),
             ),
           IconButton(
             icon: const Icon(Icons.folder_open),
             onPressed: _selectMangaFolder,
-            tooltip: '选择漫画文件夹',
+            tooltip: l10n.tr('selectMangaFolder'),
           ),
           PopupMenuButton<String>(
             onSelected: (value) {
@@ -57,13 +59,13 @@ class _MangaListPageState extends ConsumerState<MangaListPage> {
               }
             },
             itemBuilder: (context) => [
-              const PopupMenuItem(
+              PopupMenuItem(
                 value: 'clear_cache', 
                 child: Row(
                    children: [
-                     Icon(Icons.cleaning_services_outlined, color: Colors.grey),
-                     SizedBox(width: 12),
-                     Text('清除漫画缓存'),
+                     const Icon(Icons.cleaning_services_outlined, color: Colors.grey),
+                     const SizedBox(width: 12),
+                     Text(l10n.tr('clearMangaCache')),
                    ],
                 )
               ),
@@ -100,15 +102,15 @@ class _MangaListPageState extends ConsumerState<MangaListPage> {
         children: [
           const Icon(Icons.api_outlined, size: 64, color: Colors.grey),
           const SizedBox(height: 16),
-          const Text(
-            '需开启API增强',
+          Text(
+            context.l10n.tr('apiEnhancementRequired'),
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
-          const Text(
-            '漫画功能需要API支持，请前往“我的”页面开启API增强功能',
+          Text(
+            context.l10n.tr('mangaApiRequiredHint'),
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey),
+            style: const TextStyle(color: Colors.grey),
           ),
           const SizedBox(height: 16),
           FilledButton.icon(
@@ -116,7 +118,7 @@ class _MangaListPageState extends ConsumerState<MangaListPage> {
               context.go('/profile');
             },
             icon: const Icon(Icons.person),
-            label: const Text('前往开启'),
+            label: Text(context.l10n.tr('goEnable')),
           ),
         ],
       ),
@@ -130,20 +132,20 @@ class _MangaListPageState extends ConsumerState<MangaListPage> {
         children: [
           const Icon(Icons.menu_book, size: 64, color: Colors.grey),
           const SizedBox(height: 16),
-          const Text(
-            '选择漫画文件夹',
+          Text(
+            context.l10n.tr('selectMangaFolderTitle'),
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
-          const Text(
-            '请选择包含漫画的文件夹开始浏览',
-            style: TextStyle(color: Colors.grey),
+          Text(
+            context.l10n.tr('selectMangaFolderHint'),
+            style: const TextStyle(color: Colors.grey),
           ),
           const SizedBox(height: 16),
           FilledButton.icon(
             onPressed: _selectMangaFolder,
             icon: const Icon(Icons.folder_open),
-            label: const Text('选择文件夹'),
+            label: Text(context.l10n.tr('selectFolder')),
           ),
         ],
       ),
@@ -158,7 +160,7 @@ class _MangaListPageState extends ConsumerState<MangaListPage> {
           const Icon(Icons.error_outline, size: 64, color: Colors.red),
           const SizedBox(height: 16),
           Text(
-            '加载失败',
+            context.l10n.tr('loadFailed'),
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -180,7 +182,7 @@ class _MangaListPageState extends ConsumerState<MangaListPage> {
               ref.read(mangaNotifierProvider.notifier).refresh();
             },
             icon: const Icon(Icons.refresh),
-            label: const Text('重试'),
+            label: Text(context.l10n.tr('retry')),
           ),
         ],
       ),
@@ -194,21 +196,21 @@ class _MangaListPageState extends ConsumerState<MangaListPage> {
         children: [
           const Icon(Icons.menu_book_outlined, size: 64, color: Colors.grey),
           const SizedBox(height: 16),
-          const Text(
-            '没有发现漫画',
+          Text(
+            context.l10n.tr('noMangaFound'),
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
-          const Text(
-            '在选择的文件夹中没有找到包含.manga文件的漫画目录',
+          Text(
+            context.l10n.tr('noMangaFoundHint'),
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey),
+            style: const TextStyle(color: Colors.grey),
           ),
           const SizedBox(height: 16),
           FilledButton.icon(
             onPressed: _selectMangaFolder,
             icon: const Icon(Icons.folder_open),
-            label: const Text('重新选择文件夹'),
+            label: Text(context.l10n.tr('reselectFolder')),
           ),
         ],
       ),
@@ -235,7 +237,7 @@ class _MangaListPageState extends ConsumerState<MangaListPage> {
   Future<void> _selectMangaFolder() async {
     final selectedPath = await showFolderSelector(
       context,
-      title: '选择漫画文件夹',
+      title: context.l10n.tr('selectMangaFolder'),
     );
 
     if (selectedPath != null && mounted) {
@@ -247,17 +249,17 @@ class _MangaListPageState extends ConsumerState<MangaListPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('清除漫画缓存'),
-        content: const Text('确定要清除所有漫画元数据和封面缓存吗？\n这将触发重新全量扫描。'),
+        title: Text(context.l10n.tr('clearMangaCache')),
+        content: Text(context.l10n.tr('confirmClearMangaCache')),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
+            child: Text(context.l10n.tr('cancel')),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('清除'),
+            child: Text(context.l10n.tr('clear')),
           ),
         ],
       ),
@@ -266,7 +268,7 @@ class _MangaListPageState extends ConsumerState<MangaListPage> {
     if (confirmed == true && mounted) {
       ref.read(mangaNotifierProvider.notifier).clearCacheAndReload();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('缓存已清除，正在重新扫描...')),
+        SnackBar(content: Text(context.l10n.tr('mangaCacheClearedAndRescan'))),
       );
     }
   }

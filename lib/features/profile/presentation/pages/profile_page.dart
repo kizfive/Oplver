@@ -7,6 +7,8 @@ import '../../../../features/auth/data/auth_provider.dart';
 import '../../../../core/theme/theme_provider.dart';
 import '../../../../features/settings/data/general_settings_provider.dart';
 import '../../../../features/settings/data/navigation_settings_provider.dart';
+import '../../../../core/network/openlist_service.dart';
+import '../../../../core/i18n/app_localizations.dart';
 import 'navigation_management_page.dart';
 
 class ProfilePage extends ConsumerWidget {
@@ -14,6 +16,7 @@ class ProfilePage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     // 监听 WebDavService 状态以获取连接信息
     final webDavService = ref.watch(webDavServiceProvider);
     final themeState = ref.watch(appThemeStateProvider);
@@ -36,13 +39,13 @@ class ProfilePage extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('个人中心'),
+        title: Text(l10n.tr('profile')),
         centerTitle: false,
         actions: [
           // Theme Toggle Button
           IconButton(
             icon: Icon(themeIcon),
-            tooltip: '切换日夜模式',
+            tooltip: l10n.tr('toggleThemeMode'),
             onPressed: () {
               // Cycle through modes: System -> Light -> Dark -> System
               final newMode = switch (themeState.mode) {
@@ -67,19 +70,19 @@ class ProfilePage extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Row(
+                  Row(
                     children: [
-                      CircleAvatar(child: Icon(Icons.person)),
-                      SizedBox(width: 16),
-                      Text('当前账户',
+                      const CircleAvatar(child: Icon(Icons.person)),
+                      const SizedBox(width: 16),
+                      Text(l10n.tr('currentAccount'),
                           style: TextStyle(
                               fontSize: 18, fontWeight: FontWeight.bold)),
                     ],
                   ),
                   const Divider(height: 32),
-                  _InfoRow(label: '服务器', value: webDavService.baseUrl ?? '未连接'),
+                  _InfoRow(label: l10n.tr('server'), value: webDavService.baseUrl ?? l10n.tr('notConnected')),
                   const SizedBox(height: 8),
-                  _InfoRow(label: '用户名', value: webDavService.username ?? '未知'),
+                  _InfoRow(label: l10n.tr('username'), value: webDavService.username ?? l10n.tr('unknown')),
                 ],
               ),
             ),
@@ -94,17 +97,38 @@ class ProfilePage extends ConsumerWidget {
               children: [
                  SwitchListTile(
                   secondary: const Icon(Icons.api_outlined),
-                  title: const Text('API增强功能'),
-                  subtitle: const Text('启用后可使用搜索、缩略图优化等高级功能'),
+                  title: Text(l10n.tr('apiEnhancement')),
+                  subtitle: Text(l10n.tr('apiEnhancementSubtitle')),
                   value: generalSettings.enableApiEnhancement,
                   onChanged: (bool value) {
                     ref.read(generalSettingsProvider.notifier).setEnableApiEnhancement(value);
                   },
                 ),
                 ListTile(
+                  leading: const Icon(Icons.health_and_safety_outlined),
+                  title: Text(l10n.tr('checkApiConnection')),
+                  subtitle: Text(l10n.tr('checkApiConnectionSubtitle')),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () async {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(l10n.tr('checkingApiConnection'))),
+                    );
+                    final apiService = ref.read(openListApiServiceProvider);
+                    final userInfo = await apiService.getCurrentUser();
+                    if (!context.mounted) return;
+                    final ok = userInfo != null;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(ok ? l10n.apiModeEnabled : l10n.apiModeFailed),
+                        backgroundColor: ok ? Colors.green : Colors.red,
+                      ),
+                    );
+                  },
+                ),
+                ListTile(
                   leading: const Icon(Icons.bookmark_add_outlined),
-                  title: const Text('漫画自动恢复阅读进度'),
-                  subtitle: const Text('进入漫画时是否自动跳转到上次阅读位置'),
+                  title: Text(l10n.tr('autoResumeManga')),
+                  subtitle: Text(l10n.tr('autoResumeMangaSubtitle')),
                   trailing: Switch(
                     value: generalSettings.autoResumeManga,
                     onChanged: (bool value) {
@@ -115,7 +139,7 @@ class ProfilePage extends ConsumerWidget {
                 const Divider(height: 1, indent: 56),
                 ListTile(
                   leading: const Icon(Icons.view_column_outlined),
-                  title: const Text('管理导航栏'),
+                  title: Text(l10n.tr('manageNavigation')),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () {
                     Navigator.of(context, rootNavigator: true).push(
@@ -126,8 +150,8 @@ class ProfilePage extends ConsumerWidget {
                 const Divider(height: 1, indent: 56),
                  ListTile(
                   leading: const Icon(Icons.start_outlined),
-                  title: const Text('登录后默认页面'),
-                  subtitle: Text(_getLabelForKey(navSettings.defaultPageKey)),
+                  title: Text(l10n.tr('defaultPageAfterLogin')),
+                  subtitle: Text(_getLabelForKey(context, navSettings.defaultPageKey)),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () async {
                     final newKey = await showDialog<String>(
@@ -139,7 +163,7 @@ class ProfilePage extends ConsumerWidget {
                              .toList();
 
                          return SimpleDialog(
-                           title: const Text('选择默认页面'),
+                           title: Text(l10n.tr('selectDefaultPage')),
                            children: visibleOptions.map((item) {
                              return SimpleDialogOption(
                                onPressed: () => Navigator.pop(context, item.key),
@@ -152,7 +176,7 @@ class ProfilePage extends ConsumerWidget {
                                       else
                                         const SizedBox(width: 16),
                                       const SizedBox(width: 8),
-                                      Text(item.label),
+                                      Text(_navLabel(context, item.key)),
                                     ],
                                  ),
                                ),
@@ -180,8 +204,8 @@ class ProfilePage extends ConsumerWidget {
               children: [
                 ListTile(
                   leading: const Icon(Icons.download_done, size: 28),
-                  title: const Text(
-                    '下载记录',
+                  title: Text(
+                    l10n.tr('downloads'),
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
                   ),
                   trailing: const Icon(Icons.chevron_right),
@@ -199,8 +223,8 @@ class ProfilePage extends ConsumerWidget {
                 const Divider(height: 1, indent: 56),
                 ListTile(
                   leading: const Icon(Icons.settings, size: 28),
-                  title: const Text(
-                    '设置',
+                  title: Text(
+                    l10n.tr('settings'),
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
                   ),
                   trailing: const Icon(Icons.chevron_right),
@@ -218,8 +242,8 @@ class ProfilePage extends ConsumerWidget {
                 const Divider(height: 1, indent: 56),
                 ListTile(
                   leading: const Icon(Icons.info_outline, size: 28),
-                  title: const Text(
-                    '关于',
+                  title: Text(
+                    l10n.tr('about'),
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
                   ),
                   trailing: const Icon(Icons.chevron_right),
@@ -248,7 +272,7 @@ class ProfilePage extends ConsumerWidget {
                 ref.read(authProvider.notifier).logout();
               },
               icon: const Icon(Icons.logout),
-              label: const Text('退出登录'),
+              label: Text(l10n.tr('logout')),
               style: FilledButton.styleFrom(
                 backgroundColor: Theme.of(context).colorScheme.errorContainer,
                 foregroundColor: Theme.of(context).colorScheme.onErrorContainer,
@@ -259,10 +283,25 @@ class ProfilePage extends ConsumerWidget {
       ),
     );
   }
-  String _getLabelForKey(String key) {
-    return kAllNavigationItems
-        .firstWhere((item) => item.key == key, orElse: () => kAllNavigationItems.first)
-        .label;
+
+  String _getLabelForKey(BuildContext context, String key) {
+    return _navLabel(context, key);
+  }
+
+  String _navLabel(BuildContext context, String key) {
+    final l10n = context.l10n;
+    switch (key) {
+      case 'home':
+        return l10n.tr('navHome');
+      case 'browse':
+        return l10n.tr('navFiles');
+      case 'manga':
+        return l10n.tr('navManga');
+      case 'profile':
+        return l10n.tr('navProfile');
+      default:
+        return key;
+    }
   }
 }
 

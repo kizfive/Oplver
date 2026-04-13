@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../../data/manga_models.dart';
 import '../../application/manga_service.dart';
 import '../../data/manga_image_provider.dart';
+import '../../../../core/i18n/app_localizations.dart';
 
 /// 漫画卡片组件
 class MangaCardWidget extends ConsumerWidget {
@@ -112,7 +113,7 @@ class MangaCardWidget extends ConsumerWidget {
                                     ),
                                     const SizedBox(width: 4),
                                     Text(
-                                      '${manga.chapters.length} 页',
+                                      '${manga.chapters.length} ${context.l10n.tr('pageUnit')}',
                                       style: Theme.of(context).textTheme.labelMedium?.copyWith(
                                         color: Theme.of(context).colorScheme.primary,
                                         fontWeight: FontWeight.w600,

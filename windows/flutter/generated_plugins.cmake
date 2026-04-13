@@ -6,7 +6,6 @@ list(APPEND FLUTTER_PLUGIN_LIST
   connectivity_plus
   flutter_secure_storage_windows
   flutter_volume_controller
-  fvp
   permission_handler_windows
   screen_brightness_windows
   share_plus

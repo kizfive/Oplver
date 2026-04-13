@@ -21,6 +21,13 @@ class LogService {
   final int _maxLogs = 1000; // 最多保留1000条日志
   File? _logFile;
   bool _initialized = false;
+  bool _enabled = false;
+
+  bool get isEnabled => _enabled;
+
+  Future<void> setEnabled(bool enabled) async {
+    _enabled = enabled;
+  }
 
   /// 初始化日志服务
   Future<void> initialize() async {
@@ -30,12 +37,9 @@ class LogService {
       final directory = await getApplicationDocumentsDirectory();
       _logFile = File('${directory.path}/app_runtime.log');
       
-      // 读取已存在的日志文件
-      if (await _logFile!.exists()) {
+      if (_enabled && await _logFile!.exists()) {
         final content = await _logFile!.readAsString();
         final lines = content.split('\n');
-        
-        // 只加载最近的日志
         for (var line in lines.take(_maxLogs)) {
           if (line.trim().isNotEmpty) {
             _parseLine(line);
@@ -92,6 +96,8 @@ class LogService {
 
   /// 记录日志
   void log(LogLevel level, String tag, String message, [Object? error, StackTrace? stackTrace]) {
+    if (!_enabled) return;
+
     final entry = LogEntry(
       timestamp: DateTime.now(),
       level: level,
@@ -119,7 +125,7 @@ class LogService {
 
   /// 写入日志文件
   Future<void> _writeToFile(LogEntry entry) async {
-    if (_logFile == null) return;
+    if (_logFile == null || !_enabled) return;
 
     try {
       await _logFile!.writeAsString(
@@ -147,7 +153,9 @@ class LogService {
       await _logFile!.delete();
     }
     
-    log(LogLevel.info, 'LogService', '日志已清除');
+    if (_enabled) {
+      log(LogLevel.info, 'LogService', '日志已清除');
+    }
   }
 
   /// 导出日志为字符串

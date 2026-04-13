@@ -10,28 +10,33 @@ import '../../../../core/enums/download_mode.dart';
 import '../../../settings/data/video_settings_provider.dart';
 import '../../../settings/data/general_settings_provider.dart';
 import '../../../../core/services/log_service.dart';
+import '../../../../core/i18n/app_localizations.dart';
+import '../../../../core/i18n/locale_provider.dart';
+import '../../../../core/services/update_checker_service.dart';
 
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final videoSettings = ref.watch(videoSettingsProvider);
     final generalSettings = ref.watch(generalSettingsProvider);
     final themeState = ref.watch(appThemeStateProvider);
+    final localeState = ref.watch(appLocaleProvider);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('设置'),
+        title: Text(l10n.settings),
       ),
       body: ListView(
         children: [
           // 通用设置分组
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
             child: Text(
-              '通用',
-              style: TextStyle(
+              l10n.general,
+              style: const TextStyle(
                 fontSize: 14,
                 color: Colors.grey,
                 fontWeight: FontWeight.bold,
@@ -41,8 +46,8 @@ class SettingsPage extends ConsumerWidget {
 
           SwitchListTile(
             secondary: const Icon(Icons.photo_library_outlined),
-            title: const Text('文件管理略缩图'),
-            subtitle: const Text('在该页面显示视频和图片的预览'),
+            title: Text(l10n.showFileThumbnails),
+            subtitle: Text(l10n.showFileThumbnailsSubtitle),
             value: generalSettings.showFileThumbnails,
             onChanged: (bool value) {
               ref
@@ -51,10 +56,18 @@ class SettingsPage extends ConsumerWidget {
             },
           ),
 
+          ListTile(
+            leading: const Icon(Icons.language),
+            title: Text(l10n.language),
+            subtitle: Text(_languageLabel(context, localeState.language)),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _showLanguageDialog(context, ref, localeState.language),
+          ),
+
           SwitchListTile(
             secondary: const Icon(Icons.network_check),
-            title: const Text('是否警告正在使用移动流量下载'),
-            subtitle: const Text('使用移动流量下载时弹出提示'),
+            title: Text(l10n.warnMobileData),
+            subtitle: Text(l10n.warnMobileDataSubtitle),
             value: generalSettings.checkMobileData,
             onChanged: (bool value) {
               ref
@@ -65,17 +78,20 @@ class SettingsPage extends ConsumerWidget {
 
           ListTile(
             leading: const Icon(Icons.file_download),
-            title: const Text('默认下载模式'),
+            title: Text(l10n.defaultDownloadMode),
             trailing: DropdownButton<DownloadMode>(
               value: generalSettings.defaultDownloadMode,
               underline: Container(),
-              items: const [
+              items: [
                 DropdownMenuItem(
-                    value: DownloadMode.alwaysAsk, child: Text('每次询问')),
+                    value: DownloadMode.alwaysAsk,
+                    child: Text(l10n.downloadModeAlwaysAsk)),
                 DropdownMenuItem(
-                    value: DownloadMode.singleFile, child: Text('直接下载(文件)')),
+                    value: DownloadMode.singleFile,
+                    child: Text(l10n.downloadModeSingle)),
                 DropdownMenuItem(
-                    value: DownloadMode.folder, child: Text('直接下载(文件夹)')),
+                    value: DownloadMode.folder,
+                    child: Text(l10n.downloadModeFolder)),
               ],
               onChanged: (DownloadMode? value) {
                 if (value != null) {
@@ -90,11 +106,11 @@ class SettingsPage extends ConsumerWidget {
           const Divider(height: 32),
 
           // 视频设置分组
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
             child: Text(
-              '视频',
-              style: TextStyle(
+              l10n.video,
+              style: const TextStyle(
                 fontSize: 14,
                 color: Colors.grey,
                 fontWeight: FontWeight.bold,
@@ -104,8 +120,8 @@ class SettingsPage extends ConsumerWidget {
 
           SwitchListTile(
             secondary: const Icon(Icons.history_outlined),
-            title: const Text('视频记忆播放'),
-            subtitle: const Text('进入视频时从上次退出的进度接续播放'),
+            title: Text(l10n.videoAutoResume),
+            subtitle: Text(l10n.videoAutoResumeSubtitle),
             value: videoSettings.enableAutoResume,
             onChanged: (bool value) {
               ref.read(videoSettingsProvider.notifier).setAutoResume(value);
@@ -114,8 +130,8 @@ class SettingsPage extends ConsumerWidget {
 
           ListTile(
             leading: const Icon(Icons.screen_rotation),
-            title: const Text('默认视频方向'),
-            subtitle: Text(videoSettings.defaultOrientation.label),
+            title: Text(l10n.defaultVideoOrientation),
+            subtitle: Text(videoSettings.defaultOrientation.label(l10n)),
             trailing: const Icon(Icons.chevron_right),
             onTap: () {
               _showOrientationDialog(context, ref);
@@ -125,11 +141,11 @@ class SettingsPage extends ConsumerWidget {
           const Divider(height: 32),
 
           // 外观设置分组
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
             child: Text(
-              '外观',
-              style: TextStyle(
+              l10n.appearance,
+              style: const TextStyle(
                 fontSize: 14,
                 color: Colors.grey,
                 fontWeight: FontWeight.bold,
@@ -139,8 +155,8 @@ class SettingsPage extends ConsumerWidget {
 
           ListTile(
             leading: Icon(Icons.palette, color: themeState.seedColor),
-            title: const Text('更改色调'),
-            subtitle: const Text('自定义软件主题色'),
+            title: Text(l10n.changeThemeColor),
+            subtitle: Text(l10n.changeThemeColorSubtitle),
             trailing: CircleAvatar(
               backgroundColor: themeState.seedColor,
               radius: 12,
@@ -153,11 +169,11 @@ class SettingsPage extends ConsumerWidget {
           const Divider(height: 32),
 
           // 高级设置分组
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
             child: Text(
-              '高级',
-              style: TextStyle(
+              l10n.advanced,
+              style: const TextStyle(
                 fontSize: 14,
                 color: Colors.grey,
                 fontWeight: FontWeight.bold,
@@ -166,15 +182,114 @@ class SettingsPage extends ConsumerWidget {
           ),
 
           ListTile(
+            leading: const Icon(Icons.system_update_alt),
+            title: Text(l10n.checkUpdate),
+            subtitle: Text(l10n.checkUpdateSubtitle),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () async {
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(l10n.checkingUpdate)),
+              );
+              await ref
+                  .read(updateCheckerServiceProvider)
+                  .checkForUpdates(context, manual: true);
+            },
+          ),
+
+          SwitchListTile(
+            secondary: const Icon(Icons.notes_outlined),
+            title: Text(l10n.tr('enableRuntimeLogs')),
+            subtitle: Text(l10n.tr('enableRuntimeLogsSubtitle')),
+            value: generalSettings.enableRuntimeLogs,
+            onChanged: (bool value) {
+              ref.read(generalSettingsProvider.notifier).setEnableRuntimeLogs(value);
+            },
+          ),
+
+          ListTile(
             leading: const Icon(Icons.bug_report),
-            title: const Text('导出运行日志'),
-            subtitle: const Text('用于问题诊断和反馈'),
+            title: Text(l10n.exportLogs),
+            subtitle: Text(l10n.exportLogsSubtitle),
             trailing: const Icon(Icons.upload_file),
             onTap: () => _exportLogs(context),
           ),
         ],
       ),
     );
+  }
+
+  String _languageLabel(BuildContext context, AppLanguage language) {
+    final l10n = context.l10n;
+    switch (language) {
+      case AppLanguage.system:
+        return l10n.languageSystem;
+      case AppLanguage.zhCN:
+        return l10n.languageZhCn;
+      case AppLanguage.enUS:
+        return l10n.languageEnUs;
+    }
+  }
+
+  Future<void> _showLanguageDialog(
+    BuildContext context,
+    WidgetRef ref,
+    AppLanguage current,
+  ) async {
+    final l10n = context.l10n;
+    final selected = await showDialog<AppLanguage>(
+      context: context,
+      builder: (ctx) {
+        return SimpleDialog(
+          title: Text(l10n.language),
+          children: [
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(ctx, AppLanguage.system),
+              child: Row(
+                children: [
+                  if (current == AppLanguage.system)
+                    const Icon(Icons.check, size: 16)
+                  else
+                    const SizedBox(width: 16),
+                  const SizedBox(width: 8),
+                  Text(l10n.languageSystem),
+                ],
+              ),
+            ),
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(ctx, AppLanguage.zhCN),
+              child: Row(
+                children: [
+                  if (current == AppLanguage.zhCN)
+                    const Icon(Icons.check, size: 16)
+                  else
+                    const SizedBox(width: 16),
+                  const SizedBox(width: 8),
+                  Text(l10n.languageZhCn),
+                ],
+              ),
+            ),
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(ctx, AppLanguage.enUS),
+              child: Row(
+                children: [
+                  if (current == AppLanguage.enUS)
+                    const Icon(Icons.check, size: 16)
+                  else
+                    const SizedBox(width: 16),
+                  const SizedBox(width: 8),
+                  Text(l10n.languageEnUs),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (selected != null && selected != current) {
+      await ref.read(appLocaleProvider.notifier).setLanguage(selected);
+    }
   }
 
   Future<void> _exportLogs(BuildContext context) async {
@@ -184,16 +299,16 @@ class SettingsPage extends ConsumerWidget {
         showDialog(
           context: context,
           barrierDismissible: false,
-          builder: (ctx) => const Center(
+          builder: (ctx) => Center(
             child: Card(
               child: Padding(
-                padding: EdgeInsets.all(20),
+                padding: const EdgeInsets.all(20),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    CircularProgressIndicator(),
-                    SizedBox(height: 16),
-                    Text('正在导出日志...'),
+                    const CircularProgressIndicator(),
+                    const SizedBox(height: 16),
+                    Text(context.l10n.tr('exportingLogs')),
                   ],
                 ),
               ),
@@ -221,15 +336,15 @@ class SettingsPage extends ConsumerWidget {
         // 使用分享功能导出
         final result = await Share.shareXFiles(
           [XFile(logFile.path)],
-          subject: 'OpenList Viewer 运行日志',
-          text: '日志文件包含 ${appLogger.getLogs().length} 条记录',
+          subject: context.l10n.tr('runtimeLogsSubject'),
+          text: '${context.l10n.tr('logsContainPrefix')} ${appLogger.getLogs().length} ${context.l10n.tr('recordsUnit')}',
         );
         
         // 显示成功提示
         if (context.mounted && result.status == ShareResultStatus.success) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('日志已导出 (${appLogger.getLogs().length} 条记录)'),
+              content: Text('${context.l10n.tr('logsExported')} (${appLogger.getLogs().length})'),
               backgroundColor: Colors.green,
             ),
           );
@@ -237,7 +352,7 @@ class SettingsPage extends ConsumerWidget {
       }
     } catch (e, stackTrace) {
       // 记录错误
-      logError('Settings', '导出日志失败', e, stackTrace);
+      logError('Settings', 'Export logs failed', e, stackTrace);
       
       // 关闭加载对话框（如果还在显示）
       if (context.mounted) {
@@ -247,7 +362,7 @@ class SettingsPage extends ConsumerWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('导出失败: $e'),
+            content: Text('${context.l10n.tr('exportFailed')}: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -256,11 +371,12 @@ class SettingsPage extends ConsumerWidget {
   }
 
   void _showOrientationDialog(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     showDialog(
       context: context,
       builder: (context) {
         return SimpleDialog(
-          title: const Text('选择视频默认方向'),
+          title: Text(l10n.defaultVideoOrientation),
           children: VideoOrientation.values.map((orientation) {
             return SimpleDialogOption(
               onPressed: () {
@@ -269,7 +385,7 @@ class SettingsPage extends ConsumerWidget {
                     .setOrientation(orientation);
                 Navigator.pop(context);
               },
-              child: Text(orientation.label),
+              child: Text(orientation.label(l10n)),
             );
           }).toList(),
         );
@@ -283,7 +399,7 @@ class SettingsPage extends ConsumerWidget {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('选择主题色'),
+          title: Text(context.l10n.tr('chooseThemeColor')),
           content: SingleChildScrollView(
             child: BlockPicker(
               pickerColor: currentColor,
@@ -317,7 +433,7 @@ class SettingsPage extends ConsumerWidget {
           ),
           actions: [
             TextButton(
-              child: const Text('取消'),
+              child: Text(context.l10n.tr('cancel')),
               onPressed: () {
                 Navigator.of(context).pop();
               },

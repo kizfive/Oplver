@@ -1,13 +1,15 @@
 name: openlist_viewer
 description: A WebDAV based file manager with media capabilities using Material 3.
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.2.0+3
 
 environment:
   sdk: '>=3.2.0 <4.0.0'
 
 dependencies:
   flutter:
+    sdk: flutter
+  flutter_localizations:
     sdk: flutter
   
   # Icons
@@ -29,8 +31,7 @@ dependencies:
   flutter_secure_storage: ^9.0.0 # 保存密码
   shared_preferences: ^2.2.2 # 保存非敏感配置 (如历史 URL)
 
-  # Media Player (libmpv based)
-  fvp: ^0.35.2 
+  # Media Player
   video_player: ^2.8.2
 
   # Image & PDF
@@ -59,6 +60,7 @@ dependencies:
   share_plus: ^10.1.2
   url_launcher: ^6.3.1
   file_picker: ^8.0.0+1
+  package_info_plus: ^8.3.0
 
 dev_dependencies:
   flutter_test:

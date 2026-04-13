@@ -19,6 +19,7 @@ import 'package:openlist_viewer/features/files/data/pdf_progress_provider.dart';
 import 'package:openlist_viewer/features/files/application/folder_analytics_service.dart';
 import 'package:openlist_viewer/features/manga/data/manga_image_provider.dart';
 import 'package:openlist_viewer/features/manga/application/manga_service.dart';
+import '../../../../core/i18n/app_localizations.dart';
 
 // Local provider controlling the frequent-folders layout on HomePage only
 // (removed: layout toggle button uses global view mode now)
@@ -40,15 +41,16 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   Future<void> _handlePlayUrl() async {
+    final l10n = context.l10n;
     final url = await showDialog<String>(
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('播放网络视频'),
+          title: Text(l10n.tr('playNetworkVideo')),
           content: TextField(
             controller: _urlController,
-            decoration: const InputDecoration(
-              hintText: '输入视频 URL (http/https/rtmp...)',
+            decoration: InputDecoration(
+              hintText: l10n.tr('inputVideoUrl'),
               border: OutlineInputBorder(),
             ),
             autofocus: true,
@@ -56,12 +58,12 @@ class _HomePageState extends ConsumerState<HomePage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('取消'),
+              child: Text(l10n.tr('cancel')),
             ),
             FilledButton(
               onPressed: () =>
                   Navigator.of(context).pop(_urlController.text.trim()),
-              child: const Text('播放'),
+              child: Text(l10n.tr('play')),
             ),
           ],
         );
@@ -76,7 +78,7 @@ class _HomePageState extends ConsumerState<HomePage> {
           if (resp.statusCode >= 400 && resp.statusCode != 405) {
             if (!mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('无法访问: ${resp.statusCode}')));
+                SnackBar(content: Text('${l10n.tr('urlNotReachable')}: ${resp.statusCode}')));
             return;
           }
         } catch (e) {
@@ -93,6 +95,7 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -104,7 +107,7 @@ class _HomePageState extends ConsumerState<HomePage> {
         actions: [
           IconButton(
             icon: const Icon(Icons.play_circle_outline),
-            tooltip: '播放 URL',
+            tooltip: l10n.tr('homePlayUrl'),
             onPressed: () {
               _urlController.clear();
               _handlePlayUrl();
@@ -152,7 +155,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                 Icon(Icons.bar_chart, size: 20, color: themeState.seedColor),
                 const SizedBox(width: 8),
                 Text(
-                  '常访文件夹',
+                  context.l10n.tr('frequentFolders'),
                   style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -161,20 +164,20 @@ class _HomePageState extends ConsumerState<HomePage> {
                 const Spacer(),
                 IconButton(
                   icon: const Icon(Icons.delete_sweep),
-                  tooltip: '清除常访计数',
+                  tooltip: context.l10n.tr('clearFrequentCount'),
                   onPressed: () async {
                     final confirm = await showDialog<bool>(
                       context: context,
                       builder: (ctx) => AlertDialog(
-                        title: const Text('确认清除'),
-                        content: const Text('确定要清除所有常访文件夹的访问计数吗？'),
+                        title: Text(context.l10n.tr('confirmClear')),
+                        content: Text(context.l10n.tr('confirmClearFrequentCount')),
                         actions: [
                           TextButton(
                               onPressed: () => Navigator.of(ctx).pop(false),
-                              child: const Text('取消')),
+                              child: Text(context.l10n.tr('cancel'))),
                           TextButton(
                               onPressed: () => Navigator.of(ctx).pop(true),
-                              child: const Text('确定')),
+                              child: Text(context.l10n.tr('confirm'))),
                         ],
                       ),
                     );
@@ -184,7 +187,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                           .clearAllCounts();
                       if (!mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('已清除常访计数')));
+                          SnackBar(content: Text(context.l10n.tr('frequentCountCleared'))));
                     }
                   },
                 ),
@@ -197,7 +200,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                 return Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Center(
-                    child: Text('暂无常访记录',
+                    child: Text(context.l10n.tr('noFrequentRecords'),
                         style: TextStyle(color: colorScheme.onSurfaceVariant)),
                   ),
                 );
@@ -224,7 +227,9 @@ class _HomePageState extends ConsumerState<HomePage> {
                       overflow: TextOverflow.ellipsis,
                     ),
                     subtitle: Text(
-                      '${entry.value} 次访问',
+                        context.l10n.locale.languageCode == 'en'
+                          ? '${entry.value} ${context.l10n.tr('visitCountSuffix')}'
+                          : '${entry.value}${context.l10n.tr('visitCountSuffix')}',
                       style: TextStyle(
                           fontSize: 12, color: colorScheme.onSurfaceVariant),
                     ),
@@ -289,7 +294,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                 Icon(Icons.history, size: 20, color: colorScheme.primary),
                 const SizedBox(width: 8),
                 Text(
-                  '播放历史',
+                  context.l10n.tr('playHistory'),
                   style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -298,20 +303,20 @@ class _HomePageState extends ConsumerState<HomePage> {
                 const Spacer(),
                 IconButton(
                   icon: const Icon(Icons.delete_sweep),
-                  tooltip: '清除播放历史',
+                  tooltip: context.l10n.tr('clearPlayHistory'),
                   onPressed: () async {
                     final confirm = await showDialog<bool>(
                       context: context,
                       builder: (ctx) => AlertDialog(
-                        title: const Text('确认清除'),
-                        content: const Text('确定要清除所有播放历史吗？'),
+                        title: Text(context.l10n.tr('confirmClear')),
+                        content: Text(context.l10n.tr('confirmClearPlayHistory')),
                         actions: [
                           TextButton(
                               onPressed: () => Navigator.of(ctx).pop(false),
-                              child: const Text('取消')),
+                              child: Text(context.l10n.tr('cancel'))),
                           TextButton(
                               onPressed: () => Navigator.of(ctx).pop(true),
-                              child: const Text('确定')),
+                              child: Text(context.l10n.tr('confirm'))),
                         ],
                       ),
                     );
@@ -321,7 +326,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                           .clearHistory();
                       if (!mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('已清除播放历史')));
+                          SnackBar(content: Text(context.l10n.tr('playHistoryCleared'))));
                     }
                   },
                 ),
@@ -342,7 +347,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                               color: colorScheme.onSurfaceVariant
                                   .withValues(alpha: 0.5)),
                           const SizedBox(width: 8),
-                          Text('暂无播放记录',
+                          Text(context.l10n.tr('noPlayRecords'),
                               style: TextStyle(
                                   color: colorScheme.onSurfaceVariant)),
                         ],
@@ -454,16 +459,16 @@ class _HistoryCard extends ConsumerWidget {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: Text('选项',
-                      style:
-                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Text(context.l10n.tr('options'),
+                      style: const TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.bold)),
                 ),
                 ListTile(
                     leading: Icon(Icons.folder_open,
                         color: Theme.of(context).colorScheme.primary),
-                    title: const Text('打开文件所在文件夹'),
+                    title: Text(context.l10n.tr('openParentFolder')),
                     onTap: () {
                       Navigator.pop(context);
 
@@ -494,19 +499,19 @@ class _HistoryCard extends ConsumerWidget {
                     }),
                 ListTile(
                     leading: const Icon(Icons.info_outline),
-                    title: const Text('文件信息'),
+                    title: Text(context.l10n.tr('fileInfo')),
                     onTap: () {
                       Navigator.pop(context);
                       showDialog(
                           context: context,
                           builder: (ctx) => AlertDialog(
-                                title: const Text('详细信息'),
+                                title: Text(context.l10n.tr('details')),
                                 content: Text(
-                                    '路径: ${item.path}\n上次打开: ${DateFormat('yyyy-MM-dd HH:mm:ss').format(item.lastOpened)}'),
+                                    '${context.l10n.tr('path')}: ${item.path}\n${context.l10n.tr('lastOpened')}: ${DateFormat('yyyy-MM-dd HH:mm:ss').format(item.lastOpened)}'),
                                 actions: [
                                   TextButton(
                                       onPressed: () => Navigator.pop(ctx),
-                                      child: const Text('确定'))
+                                      child: Text(context.l10n.tr('confirm')))
                                 ],
                               ));
                     }),
@@ -540,7 +545,7 @@ class _HistoryCard extends ConsumerWidget {
             context.push('/manga/reader', extra: manga);
           } else {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('无法加载漫画信息')),
+              SnackBar(content: Text(context.l10n.tr('cannotLoadMangaInfo'))),
             );
           }
         }
@@ -548,7 +553,7 @@ class _HistoryCard extends ConsumerWidget {
          if (context.mounted) {
           Navigator.of(context, rootNavigator: true).pop();
           ScaffoldMessenger.of(context).showSnackBar(
-             SnackBar(content: Text('打开漫画失败: $e')),
+             SnackBar(content: Text('${context.l10n.tr('openMangaFailed')}: $e')),
           );
          }
       }
@@ -601,7 +606,7 @@ class _HistoryCard extends ConsumerWidget {
         if (context.mounted) {
           Navigator.of(context, rootNavigator: true).pop();
           ScaffoldMessenger.of(context)
-              .showSnackBar(SnackBar(content: Text('加载目录失败: $e')));
+              .showSnackBar(SnackBar(content: Text('${context.l10n.tr('loadDirectoryFailed')}: $e')));
           final fullUrl = webDavService.getUrl(item.path);
           context.push('/gallery/view', extra: {
             'imageUrls': [fullUrl],

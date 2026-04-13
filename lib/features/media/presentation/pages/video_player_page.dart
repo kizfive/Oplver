@@ -70,6 +70,9 @@ class _VideoPlayerPageState extends ConsumerState<VideoPlayerPage> {
 
   // Optimistic UI
   bool? _optimisticIsPlaying;
+  int _lastUiSecond = -1;
+  bool? _lastPlayingState;
+  bool? _lastBufferingState;
 
   @override
   void initState() {
@@ -116,17 +119,12 @@ class _VideoPlayerPageState extends ConsumerState<VideoPlayerPage> {
         fullUri,
         httpHeaders: webDavService.authHeaders,
         videoPlayerOptions: VideoPlayerOptions(
-          // 使用 fvp 的混合模式，避免暂停时的帧跳动
           mixWithOthers: true,
           allowBackgroundPlayback: false,
         ),
       );
 
       await _videoPlayerController.initialize();
-      
-      // fvp 已经通过 registerWith 配置了精确的暂停参数
-      // 使用 video-sync: display-resample 和 hr-seek 来减少跳帧
-      debugPrint('video: using fvp with optimized pause configuration');
 
       // Initialize system controls
       try {
@@ -262,6 +260,34 @@ class _VideoPlayerPageState extends ConsumerState<VideoPlayerPage> {
 
   void _onVideoTick() {
     if (!mounted || _isDisposed) return;
+
+    final value = _videoPlayerController.value;
+    final currentSecond = value.position.inSeconds;
+    final isPlaying = value.isPlaying;
+    final isBuffering = value.isBuffering;
+
+    final controlsActive = _showControls || _isSeeking || _showFeedback;
+    final secondChanged = currentSecond != _lastUiSecond;
+    final playingChanged = isPlaying != _lastPlayingState;
+    final bufferingChanged = isBuffering != _lastBufferingState;
+
+    if (!secondChanged && !playingChanged && !bufferingChanged) {
+      return;
+    }
+
+    if (!controlsActive && !playingChanged && !bufferingChanged) {
+      _lastUiSecond = currentSecond;
+      return;
+    }
+
+    _lastUiSecond = currentSecond;
+    _lastPlayingState = isPlaying;
+    _lastBufferingState = isBuffering;
+
+    if (_optimisticIsPlaying != null && _optimisticIsPlaying == isPlaying) {
+      _optimisticIsPlaying = null;
+    }
+
     setState(() {});
   }
 
@@ -299,9 +325,6 @@ class _VideoPlayerPageState extends ConsumerState<VideoPlayerPage> {
 
     try {
       if (wasPlaying) {
-        // 暂停视频
-        // fvp 的配置 (video-sync: display-resample, hr-seek, framedrop: no)
-        // 已经优化了暂停时的帧精确度
         debugPrint('video: pause requested - pos=${_videoPlayerController.value.position.inMilliseconds}ms');
         await _videoPlayerController.pause();
         debugPrint('video: paused at pos=${_videoPlayerController.value.position.inMilliseconds}ms');

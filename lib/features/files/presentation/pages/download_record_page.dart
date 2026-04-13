@@ -6,6 +6,7 @@ import 'package:open_filex/open_filex.dart';
 import 'package:path/path.dart' as path;
 import 'package:android_intent_plus/android_intent.dart';
 import 'package:android_intent_plus/flag.dart';
+import '../../../../core/i18n/app_localizations.dart';
 
 import '../../application/download_service.dart';
 import '../../application/download_task.dart';
@@ -16,28 +17,29 @@ class DownloadRecordPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tasks = ref.watch(downloadNotifierProvider);
+    final l10n = context.l10n;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('下载记录'),
+        title: Text(l10n.tr('downloadRecords')),
         actions: [
           IconButton(
             icon: const Icon(Icons.delete_sweep),
-            tooltip: '清除已完成记录',
+            tooltip: l10n.tr('clearCompletedRecords'),
             onPressed: () async {
               final confirm = await showDialog<bool>(
                 context: context,
                 builder: (ctx) => AlertDialog(
-                  title: const Text('确认清除'),
-                  content: const Text('确定要清除所有已完成/失败的下载记录吗？'),
+                  title: Text(l10n.tr('confirmClear')),
+                  content: Text(l10n.tr('confirmClearCompletedRecords')),
                   actions: [
                     TextButton(
                       onPressed: () => Navigator.of(ctx).pop(false),
-                      child: const Text('取消'),
+                      child: Text(l10n.tr('cancel')),
                     ),
                     TextButton(
                       onPressed: () => Navigator.of(ctx).pop(true),
-                      child: const Text('确定'),
+                      child: Text(l10n.tr('confirm')),
                     ),
                   ],
                 ),
@@ -46,7 +48,7 @@ class DownloadRecordPage extends ConsumerWidget {
                 ref.read(downloadNotifierProvider.notifier).clearCompletedTasks();
                 if (!context.mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('已清除完成记录')),
+                  SnackBar(content: Text(l10n.tr('completedRecordsCleared'))),
                 );
               }
             },
@@ -54,7 +56,7 @@ class DownloadRecordPage extends ConsumerWidget {
         ],
       ),
       body: tasks.isEmpty
-          ? const Center(child: Text('没有下载记录'))
+          ? Center(child: Text(l10n.tr('noDownloadRecords')))
           : ListView.separated(
               itemCount: tasks.length,
               separatorBuilder: (context, index) => const Divider(height: 1),
@@ -121,11 +123,11 @@ class _DownloadTaskTile extends ConsumerWidget {
     switch (task.status) {
       case DownloadTaskStatus.failed:
         statusColor = theme.colorScheme.error;
-        statusText = 'Failed';
+        statusText = context.l10n.tr('failed');
         break;
       case DownloadTaskStatus.paused:
         statusColor = Colors.orange;
-        statusText = 'Paused';
+        statusText = context.l10n.tr('paused');
         break;
       case DownloadTaskStatus.completed:
         statusColor = Colors.green;
@@ -308,9 +310,8 @@ class _DownloadTaskTile extends ConsumerWidget {
 
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                            '无法直接打开子文件夹。文件位于 "Download > Oplver Download" 中'),
+                      SnackBar(
+                        content: Text(context.l10n.tr('cannotOpenFolderDirectly')),
                         duration: Duration(seconds: 3),
                       ),
                     );

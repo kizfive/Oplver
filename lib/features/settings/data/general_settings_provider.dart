@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/enums/download_mode.dart';
+import '../../../core/services/log_service.dart';
 import '../../auth/data/auth_provider.dart';
 
 class GeneralSettingsState {
@@ -9,6 +10,7 @@ class GeneralSettingsState {
   final DownloadMode defaultDownloadMode;
   final bool enableApiEnhancement;
   final bool autoResumeManga;
+  final bool enableRuntimeLogs;
 
   GeneralSettingsState({
     this.showFileThumbnails = true,
@@ -16,6 +18,7 @@ class GeneralSettingsState {
     this.defaultDownloadMode = DownloadMode.alwaysAsk,
     this.enableApiEnhancement = false,
     this.autoResumeManga = true,
+    this.enableRuntimeLogs = false,
   });
 
   GeneralSettingsState copyWith({
@@ -24,6 +27,7 @@ class GeneralSettingsState {
     DownloadMode? defaultDownloadMode,
     bool? enableApiEnhancement,
     bool? autoResumeManga,
+    bool? enableRuntimeLogs,
   }) {
     return GeneralSettingsState(
       showFileThumbnails: showFileThumbnails ?? this.showFileThumbnails,
@@ -31,6 +35,7 @@ class GeneralSettingsState {
       defaultDownloadMode: defaultDownloadMode ?? this.defaultDownloadMode,
       enableApiEnhancement: enableApiEnhancement ?? this.enableApiEnhancement,
       autoResumeManga: autoResumeManga ?? this.autoResumeManga,
+      enableRuntimeLogs: enableRuntimeLogs ?? this.enableRuntimeLogs,
     );
   }
 }
@@ -42,6 +47,7 @@ class GeneralSettingsNotifier extends StateNotifier<GeneralSettingsState> {
   late final String _kDefaultDownloadModeKey;
   late final String _kEnableApiEnhancementKey;
   late final String _kAutoResumeMangaKey;
+  late final String _kEnableRuntimeLogsKey;
 
   GeneralSettingsNotifier(this.userId) : super(GeneralSettingsState()) {
     final suffix = userId.isNotEmpty ? '_$userId' : '';
@@ -50,6 +56,7 @@ class GeneralSettingsNotifier extends StateNotifier<GeneralSettingsState> {
     _kDefaultDownloadModeKey = 'default_download_mode$suffix';
     _kEnableApiEnhancementKey = 'enable_api_enhancement$suffix';
     _kAutoResumeMangaKey = 'auto_resume_manga$suffix';
+    _kEnableRuntimeLogsKey = 'enable_runtime_logs$suffix';
     _loadSettings();
   }
 
@@ -60,6 +67,13 @@ class GeneralSettingsNotifier extends StateNotifier<GeneralSettingsState> {
     final downloadModeIndex = prefs.getInt(_kDefaultDownloadModeKey) ?? 0;
     final enableApiEnhancement = prefs.getBool(_kEnableApiEnhancementKey) ?? false;
     final autoResumeManga = prefs.getBool(_kAutoResumeMangaKey) ?? true;
+    final enableRuntimeLogs = prefs.getBool(_kEnableRuntimeLogsKey) ?? false;
+
+    await appLogger.setEnabled(enableRuntimeLogs);
+
+    if (!mounted) {
+      return;
+    }
 
     state = state.copyWith(
       showFileThumbnails: showFileThumbnails,
@@ -67,6 +81,7 @@ class GeneralSettingsNotifier extends StateNotifier<GeneralSettingsState> {
       defaultDownloadMode: DownloadMode.values[downloadModeIndex.clamp(0, DownloadMode.values.length - 1)],
       enableApiEnhancement: enableApiEnhancement,
       autoResumeManga: autoResumeManga,
+      enableRuntimeLogs: enableRuntimeLogs,
     );
   }
 
@@ -98,6 +113,13 @@ class GeneralSettingsNotifier extends StateNotifier<GeneralSettingsState> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_kEnableApiEnhancementKey, value);
     state = state.copyWith(enableApiEnhancement: value);
+  }
+
+  Future<void> setEnableRuntimeLogs(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kEnableRuntimeLogsKey, value);
+    await appLogger.setEnabled(value);
+    state = state.copyWith(enableRuntimeLogs: value);
   }
 }
 

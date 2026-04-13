@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../features/settings/data/navigation_settings_provider.dart';
+import '../../../../core/i18n/app_localizations.dart';
 
 class NavigationManagementPage extends ConsumerWidget {
   const NavigationManagementPage({super.key});
@@ -17,7 +18,7 @@ class NavigationManagementPage extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('导航栏管理'),
+        title: Text(context.l10n.tr('manageNavigation')),
       ),
       body: ReorderableListView.builder(
         itemCount: items.length,
@@ -28,10 +29,16 @@ class NavigationManagementPage extends ConsumerWidget {
           final item = items[index];
           final isHidden = settings.hiddenKeys.contains(item.key);
           final isProfile = item.key == 'profile';
+          final labelByKey = {
+            'home': context.l10n.tr('navHome'),
+            'browse': context.l10n.tr('navFiles'),
+            'manga': context.l10n.tr('navManga'),
+            'profile': context.l10n.tr('navProfile'),
+          };
 
           return ListTile(
             key: ValueKey(item.key),
-            title: Text(item.label),
+            title: Text(labelByKey[item.key] ?? item.label),
             leading: const Icon(Icons.drag_handle),
             trailing: Switch(
               value: !isHidden,

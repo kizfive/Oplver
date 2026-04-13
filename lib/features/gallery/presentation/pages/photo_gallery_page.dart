@@ -12,6 +12,7 @@ import 'package:path/path.dart' as path_context;
 import '../../../files/application/download_service.dart';
 import '../../../settings/data/general_settings_provider.dart';
 import '../../../../core/enums/download_mode.dart';
+import '../../../../core/i18n/app_localizations.dart';
 import '../../../history/data/file_history_provider.dart';
 
 class PhotoGalleryPage extends ConsumerStatefulWidget {
@@ -85,6 +86,7 @@ class _PhotoGalleryPageState extends ConsumerState<PhotoGalleryPage> {
   }
 
   Future<void> _handleDownload(BuildContext context, webdav.File file) async {
+    final l10n = context.l10n;
     final downloadService = ref.read(downloadServiceProvider);
     final messenger = ScaffoldMessenger.of(context);
     // 1. Check preconditions
@@ -94,7 +96,7 @@ class _PhotoGalleryPageState extends ConsumerState<PhotoGalleryPage> {
 
     if (status == DownloadPreconditionStatus.permissionDenied) {
       if (!mounted) return;
-      messenger.showSnackBar(const SnackBar(content: Text('需要存储权限才能下载')));
+      messenger.showSnackBar(SnackBar(content: Text(l10n.tr('storagePermissionRequired'))));
       return;
     }
 
@@ -110,30 +112,30 @@ class _PhotoGalleryPageState extends ConsumerState<PhotoGalleryPage> {
       final selected = await showDialog<DownloadMode>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('下载选项'),
+          title: Text(l10n.tr('downloadOptions')),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('文件名: ${file.name}'),
-              if (file.size != null) Text('大小: ${_formatSize(file.size)}'),
+              Text('${l10n.tr('fileName')}: ${file.name}'),
+              if (file.size != null) Text('${l10n.tr('size')}: ${_formatSize(file.size)}'),
               const SizedBox(height: 16),
-              const Text('请选择下载方式:'),
+              Text(l10n.tr('chooseDownloadMode')),
             ],
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, null),
-              child: const Text('取消'),
+              child: Text(l10n.tr('cancel')),
             ),
             TextButton(
               onPressed: () => Navigator.pop(context, DownloadMode.singleFile),
-              child: const Text('仅下载当前图片'),
+              child: Text(l10n.tr('downloadCurrentImageOnly')),
             ),
             if (widget.files != null && widget.files!.isNotEmpty)
               TextButton(
                 onPressed: () => Navigator.pop(context, DownloadMode.folder),
-                child: const Text('下载整个文件夹内的图片'),
+                child: Text(l10n.tr('downloadAllImagesInFolder')),
               ),
           ],
         ),
@@ -152,16 +154,16 @@ class _PhotoGalleryPageState extends ConsumerState<PhotoGalleryPage> {
       proceed = await showDialog<bool>(
             context: context,
             builder: (context) => AlertDialog(
-              title: const Text('流量提醒'),
-              content: const Text('当前处于移动数据网络，是否继续下载？'),
+              title: Text(l10n.tr('mobileDataWarning')),
+              content: Text(l10n.tr('mobileDataContinueDownload')),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context, false),
-                  child: const Text('取消'),
+                  child: Text(l10n.tr('cancel')),
                 ),
                 TextButton(
                   onPressed: () => Navigator.pop(context, true),
-                  child: const Text('继续'),
+                  child: Text(l10n.tr('continueAction')),
                 ),
               ],
             ),
@@ -182,16 +184,16 @@ class _PhotoGalleryPageState extends ConsumerState<PhotoGalleryPage> {
       } catch (e) {
         if (!mounted) return;
         messenger.showSnackBar(
-            SnackBar(content: Text('下载失败 (${targetFile.name}): $e')));
+            SnackBar(content: Text('${l10n.tr('downloadFailed')} (${targetFile.name}): $e')));
       }
     }
 
     if (batchDownloadMode && widget.files != null) {
       if (!mounted) return;
       messenger.showSnackBar(SnackBar(
-        content: Text('开始批量下载 ${widget.files!.length} 张图片...'),
+        content: Text('${l10n.tr('startBatchDownloadImages')} ${widget.files!.length}...'),
         action: SnackBarAction(
-          label: '查看',
+          label: l10n.tr('view'),
           onPressed: () => context.push('/download_records'),
         ),
       ));
@@ -206,9 +208,9 @@ class _PhotoGalleryPageState extends ConsumerState<PhotoGalleryPage> {
       // Single file
       if (!mounted) return;
       messenger.showSnackBar(SnackBar(
-        content: Text('开始下载: ${file.name}'),
+        content: Text('${l10n.tr('startDownload')}: ${file.name}'),
         action: SnackBarAction(
-          label: '查看',
+          label: l10n.tr('view'),
           onPressed: () => context.push('/download_records'),
         ),
       ));
@@ -219,6 +221,7 @@ class _PhotoGalleryPageState extends ConsumerState<PhotoGalleryPage> {
   void _showFileOptions(BuildContext context) {
     if (widget.files == null || _currentIndex >= widget.files!.length) return;
 
+    final l10n = context.l10n;
     final file = widget.files![_currentIndex] as webdav.File;
     // AppFileType is image since we are in gallery
 
@@ -231,7 +234,7 @@ class _PhotoGalleryPageState extends ConsumerState<PhotoGalleryPage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                title: Text(file.name ?? 'Unknown',
+                title: Text(file.name ?? context.l10n.tr('unknown'),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -239,7 +242,7 @@ class _PhotoGalleryPageState extends ConsumerState<PhotoGalleryPage> {
               const Divider(),
               ListTile(
                 leading: const Icon(Icons.download),
-                title: const Text('下载到本地'),
+                title: Text(l10n.tr('downloadToLocal')),
                 onTap: () {
                   Navigator.pop(sheetContext);
                   _handleDownload(context, file);
@@ -247,31 +250,31 @@ class _PhotoGalleryPageState extends ConsumerState<PhotoGalleryPage> {
               ),
               ListTile(
                 leading: const Icon(Icons.info_outline),
-                title: const Text('详细信息'),
+                title: Text(l10n.tr('details')),
                 onTap: () {
                   Navigator.pop(sheetContext);
                   showDialog(
                     context: context,
                     builder: (context) => AlertDialog(
-                      title: const Text('详细信息'),
+                      title: Text(l10n.tr('details')),
                       content: Column(
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('名称: ${file.name}'),
+                          Text('${l10n.tr('name')}: ${file.name}'),
                           const SizedBox(height: 8),
                           Text(
-                              '路径: ${path_context.posix.join(widget.currentPath, file.name)}'),
+                              '${l10n.tr('path')}: ${path_context.posix.join(widget.currentPath, file.name)}'),
                           const SizedBox(height: 8),
-                          Text('大小: ${_formatSize(file.size)}'),
+                          Text('${l10n.tr('size')}: ${_formatSize(file.size)}'),
                           const SizedBox(height: 8),
-                          Text('修改时间: ${file.mTime ?? '--'}'),
+                          Text('${l10n.tr('modifiedTime')}: ${file.mTime ?? '--'}'),
                         ],
                       ),
                       actions: [
                         TextButton(
                           onPressed: () => Navigator.pop(context),
-                          child: const Text('关闭'),
+                          child: Text(l10n.tr('close')),
                         ),
                       ],
                     ),
@@ -323,8 +326,8 @@ class _PhotoGalleryPageState extends ConsumerState<PhotoGalleryPage> {
                       const Icon(Icons.broken_image,
                           color: Colors.white, size: 50),
                       const SizedBox(height: 10),
-                      const Text(
-                        '无法加载图片',
+                      Text(
+                        context.l10n.tr('cannotLoadImage'),
                         style: TextStyle(color: Colors.white),
                       ),
                       Text(

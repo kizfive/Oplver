@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../../../../core/i18n/app_localizations.dart';
 import '../../data/gallery_provider.dart';
 import '../../../../features/auth/data/auth_provider.dart';
 
@@ -25,10 +26,11 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(galleryProvider);
+    final l10n = context.l10n;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('全部相册'),
+        title: Text(l10n.tr('allAlbums')),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -52,10 +54,10 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text('加载失败: ${state.error}'),
+            Text('${l10n.tr('loadFailed')}: ${state.error}'),
             ElevatedButton(
               onPressed: () => ref.read(galleryProvider.notifier).loadImages(),
-              child: const Text('重试'),
+              child: Text(l10n.tr('retry')),
             )
           ],
         ),
@@ -63,7 +65,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
     }
 
     if (state.images.isEmpty) {
-      return const Center(child: Text('没有发现图片'));
+      return Center(child: Text(l10n.tr('noImagesFound')));
     }
 
     return GridView.builder(

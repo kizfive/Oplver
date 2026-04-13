@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../settings/data/navigation_settings_provider.dart';
+import '../../../../core/i18n/app_localizations.dart';
 
 class MainScreen extends ConsumerStatefulWidget {
   final StatefulNavigationShell navigationShell;
@@ -139,7 +140,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
         return NavigationDestination(
           icon: Icon(Icons.home_outlined, color: Theme.of(context).colorScheme.primary),
           selectedIcon: Icon(Icons.home, color: Theme.of(context).colorScheme.primary),
-          label: '首页',
+          label: context.l10n.tr('navHome'),
         );
       case 'browse': // Key is 'browse', label '文件'
          return NavigationDestination(
@@ -147,7 +148,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
                 color: Theme.of(context).colorScheme.primary),
             selectedIcon: Icon(Icons.folder,
                 color: Theme.of(context).colorScheme.primary),
-            label: '文件',
+            label: context.l10n.tr('navFiles'),
           );
       case 'manga':
          return NavigationDestination(
@@ -155,7 +156,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
                 color: Theme.of(context).colorScheme.primary),
             selectedIcon: Icon(Icons.menu_book,
                 color: Theme.of(context).colorScheme.primary),
-            label: '漫画',
+            label: context.l10n.tr('navManga'),
           );
       case 'profile':
          return NavigationDestination(
@@ -163,7 +164,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
                 color: Theme.of(context).colorScheme.primary),
             selectedIcon: Icon(Icons.person,
                 color: Theme.of(context).colorScheme.primary),
-            label: '我的',
+            label: context.l10n.tr('navProfile'),
           );
       default:
          return const NavigationDestination(icon: Icon(Icons.error), label: 'Unknown');

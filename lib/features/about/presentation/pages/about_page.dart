@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../../../core/i18n/app_localizations.dart';
 
 class AboutPage extends StatelessWidget {
   const AboutPage({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('关于'),
+        title: Text(l10n.tr('about')),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -54,7 +56,7 @@ class AboutPage extends StatelessWidget {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          '由 Notess 开发',
+                          l10n.tr('aboutDeveloper'),
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                 color: Theme.of(context).colorScheme.onSurfaceVariant,
                               ),
@@ -85,7 +87,7 @@ class AboutPage extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
             child: Text(
-              '依赖库',
+              l10n.tr('dependencies'),
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -124,13 +126,6 @@ class AboutPage extends StatelessWidget {
         version: '1.2.0',
         author: 'Various Contributors',
         license: 'MIT',
-      ),
-      _LibraryInfo(
-        name: 'fvp',
-        version: '0.35.2',
-        author: 'Wang Bin',
-        license: 'LGPL-2.1',
-        isLGPL: true,
       ),
       _LibraryInfo(
         name: 'video_player',
@@ -220,8 +215,8 @@ class AboutPage extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SizedBox(height: 4),
-                    Text('版本: ${lib.version}'),
-                    Text('作者: ${lib.author}'),
+                    Text('${context.l10n.tr('versionLabel')}: ${lib.version}'),
+                    Text('${context.l10n.tr('authorLabel')}: ${lib.author}'),
                     if (lib.isLGPL) ...[
                       const SizedBox(height: 4),
                       Text(

@@ -171,16 +171,26 @@ class UserInfo {
   });
 
   factory UserInfo.fromJson(Map<String, dynamic> json) {
+    bool toBool(dynamic value) {
+      if (value is bool) return value;
+      if (value is num) return value != 0;
+      if (value is String) {
+        final normalized = value.toLowerCase();
+        return normalized == 'true' || normalized == '1' || normalized == 'yes';
+      }
+      return false;
+    }
+
     return UserInfo(
       id: json['id'] as int? ?? 0,
       username: json['username'] as String? ?? '',
       password: json['password'] as String?,
       basePath: json['base_path'] as String?,
       role: json['role'] as int? ?? 0,
-      disabled: json['disabled'] as bool? ?? false,
+      disabled: toBool(json['disabled']),
       permission: json['permission'] as int? ?? 0,
-      otp: json['otp'] as bool? ?? false,
-      ssoId: json['sso_id'] as bool? ?? false,
+      otp: toBool(json['otp']),
+      ssoId: toBool(json['sso_id']),
     );
   }
 }

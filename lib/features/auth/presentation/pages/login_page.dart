@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../data/auth_provider.dart';
+import '../../../../core/network/openlist_service.dart';
+import '../../../../core/i18n/app_localizations.dart';
+import '../../../../core/ui/global_scaffold_messenger.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
@@ -148,21 +151,40 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     // 监听认证状态
     final authState = ref.watch(authProvider);
 
     // 监听认证错误
-    ref.listen(authProvider, (previous, next) {
+    ref.listen(authProvider, (previous, next) async {
       if (next.error != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        globalScaffoldMessengerKey.currentState?.showSnackBar(
           SnackBar(content: Text(next.error!), backgroundColor: Colors.red),
         );
       }
-      if (next.isAuthenticated) {
-        // 登录成功后，GoRouter 的 redirect 逻辑会自动拦截并跳转到 /files
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('登录成功！'), backgroundColor: Colors.green),
+      final justAuthenticated =
+          next.isAuthenticated && (previous?.isAuthenticated != true);
+
+      if (justAuthenticated) {
+        globalScaffoldMessengerKey.currentState?.showSnackBar(
+          SnackBar(content: Text(l10n.loginSuccess), backgroundColor: Colors.green),
         );
+
+        final username = next.currentUser ?? _usernameController.text.trim();
+        final useApiEnhancement = await _isApiEnhancementEnabledForUser(username);
+        if (useApiEnhancement) {
+          final apiService = ref.read(openListApiServiceProvider);
+          final userInfo = await apiService.getCurrentUser();
+          await Future<void>.delayed(const Duration(milliseconds: 900));
+
+          final apiEnabled = userInfo != null;
+          globalScaffoldMessengerKey.currentState?.showSnackBar(
+            SnackBar(
+              content: Text(apiEnabled ? l10n.apiModeEnabled : l10n.apiModeFailed),
+              backgroundColor: apiEnabled ? Colors.green : Colors.red,
+            ),
+          );
+        }
       }
     });
 
@@ -186,7 +208,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'OpenList Viewer',
+                    l10n.appTitle,
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                           fontWeight: FontWeight.bold,
@@ -198,13 +220,13 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   TextFormField(
                     controller: _urlController,
                     decoration: InputDecoration(
-                      labelText: '服务器地址',
+                      labelText: l10n.tr('serverAddress'),
                       hintText: 'https://your-server.com/dav',
                       prefixIcon: const Icon(Icons.link),
                       suffixIcon: _historyUrls.isNotEmpty
                           ? PopupMenuButton<String>(
                               icon: const Icon(Icons.history),
-                              tooltip: '历史记录',
+                              tooltip: l10n.tr('history'),
                               onSelected: _onUrlSelected,
                               itemBuilder: (context) {
                                 return _historyUrls.map((url) {
@@ -217,18 +239,18 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                             )
                           : null,
                     ),
-                    validator: (value) => value!.isEmpty ? '请输入服务器地址' : null,
+                    validator: (value) => value!.isEmpty ? l10n.tr('inputServerAddress') : null,
                   ),
                   const SizedBox(height: 16),
 
                   // Username
                   TextFormField(
                     controller: _usernameController,
-                    decoration: const InputDecoration(
-                      labelText: '用户名',
+                    decoration: InputDecoration(
+                      labelText: l10n.tr('username'),
                       prefixIcon: Icon(Icons.person),
                     ),
-                    validator: (value) => value!.isEmpty ? '请输入用户名' : null,
+                    validator: (value) => value!.isEmpty ? l10n.tr('inputUsername') : null,
                   ),
                   const SizedBox(height: 16),
 
@@ -237,7 +259,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     controller: _passwordController,
                     obscureText: _obscurePassword,
                     decoration: InputDecoration(
-                      labelText: '密码',
+                      labelText: l10n.tr('password'),
                       prefixIcon: const Icon(Icons.lock),
                       suffixIcon: IconButton(
                         icon: Icon(
@@ -252,7 +274,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         },
                       ),
                     ),
-                    validator: (value) => value!.isEmpty ? '请输入密码' : null,
+                    validator: (value) => value!.isEmpty ? l10n.tr('inputPassword') : null,
                   ),
                   const SizedBox(height: 16),
 
@@ -264,13 +286,13 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         onChanged: (v) =>
                             setState(() => _rememberPassword = v!),
                       ),
-                      const Text('记住密码'),
+                      Text(l10n.tr('rememberPassword')),
                       const Spacer(),
                       Switch(
                         value: _autoLogin,
                         onChanged: (v) => setState(() => _autoLogin = v),
                       ),
-                      const Text('自动登录'),
+                      Text(l10n.tr('autoLogin')),
                     ],
                   ),
                   const SizedBox(height: 24),
@@ -290,7 +312,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                               color: Colors.white,
                             ),
                           )
-                        : const Text('连接服务器'),
+                        : Text(l10n.tr('connectServer')),
                   ),
                 ],
               ),
@@ -299,5 +321,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         ),
       ),
     );
+  }
+
+  Future<bool> _isApiEnhancementEnabledForUser(String username) async {
+    if (username.isEmpty) return false;
+    final prefs = await SharedPreferences.getInstance();
+    final userId = username.replaceAll(RegExp(r'[^\w]'), '_');
+    return prefs.getBool('enable_api_enhancement_$userId') ?? false;
   }
 }

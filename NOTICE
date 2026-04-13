@@ -1,12 +1,5 @@
 本软件使用了以下第三方库：
 
-fvp (https://pub.dev/packages/fvp)
-- 版本: 0.35.2
-- 作者: Wang Bin
-- 许可证: GNU Lesser General Public License v2.1
-- 完整许可证文本见: licenses/LGPL-2.1.txt
-- 如需替换此库，请修改 pubspec.yaml 中的 fvp 版本
-
 flutter
 - 版本: SDK
 - 作者: Google

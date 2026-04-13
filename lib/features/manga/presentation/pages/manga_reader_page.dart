@@ -8,6 +8,7 @@ import '../../application/manga_service.dart';
 import '../../data/manga_image_provider.dart';
 import '../../data/manga_provider.dart'; // Add manga provider import
 import '../../../settings/data/general_settings_provider.dart';
+import '../../../../core/i18n/app_localizations.dart';
 
 import 'package:openlist_viewer/features/history/data/file_history_provider.dart';
 
@@ -48,6 +49,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage> {
   
   // 恢复阅读进度
   void _restoreReadingProgress() async {
+    final l10n = context.l10n;
     final settings = ref.read(generalSettingsProvider);
     // 确保有进度且开启了自动恢复
     if (settings.autoResumeManga && widget.manga.lastReadIndex > 0) {
@@ -82,7 +84,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-           content: Text('已恢复阅读进度: 第 ${targetPage + 1} 页'),
+           content: Text('${l10n.tr('readingProgressRestored')}: ${l10n.tr('pagePrefix')} ${targetPage + 1} ${l10n.tr('pageUnit')}'),
            duration: const Duration(milliseconds: 1000),
         ));
       }
@@ -214,22 +216,23 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage> {
   }
 
   void _jumpToPage() {
+    final l10n = context.l10n;
     showDialog(
       context: context,
       builder: (context) {
         int targetPage = _currentPage + 1;
         return AlertDialog(
-          title: const Text('跳转到页面'),
+          title: Text(l10n.tr('jumpToPage')),
           content: StatefulBuilder(
             builder: (context, setState) {
               return Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('总共 ${widget.manga.chapters.length} 页'),
+                  Text('${l10n.tr('totalPages')} ${widget.manga.chapters.length} ${l10n.tr('pageUnit')}'),
                   const SizedBox(height: 16),
                   TextField(
-                    decoration: const InputDecoration(
-                      labelText: '页码',
+                    decoration: InputDecoration(
+                      labelText: l10n.tr('pageNumber'),
                       border: OutlineInputBorder(),
                     ),
                     keyboardType: TextInputType.number,
@@ -245,7 +248,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('取消'),
+              child: Text(l10n.tr('cancel')),
             ),
             FilledButton(
               onPressed: () {
@@ -277,7 +280,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage> {
                 });
                 _updateHistory(); // 更新进度
               },
-              child: const Text('跳转'),
+              child: Text(l10n.tr('jump')),
             ),
           ],
         );
@@ -287,6 +290,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final mangaService = ref.watch(mangaServiceProvider);
     final topPadding = MediaQuery.of(context).padding.top;
     final headerHeight = kToolbarHeight + topPadding;
@@ -337,12 +341,12 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage> {
                 IconButton(
                   icon: Icon(_isVerticalMode ? Icons.view_column : Icons.view_agenda),
                   onPressed: _toggleReadingMode,
-                  tooltip: _isVerticalMode ? '切换到水平模式' : '切换到垂直模式',
+                  tooltip: _isVerticalMode ? l10n.tr('switchToHorizontalMode') : l10n.tr('switchToVerticalMode'),
                 ),
                 IconButton(
                   icon: const Icon(Icons.settings),
                   onPressed: _jumpToPage, // 保留精确跳转功能
-                  tooltip: '跳转页面',
+                  tooltip: l10n.tr('jumpToPage'),
                 ),
               ],
             ),
@@ -366,11 +370,11 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                        Text(
-                        '第 ${_currentPage + 1} 页', 
+                        '${l10n.tr('pagePrefix')} ${_currentPage + 1} ${l10n.tr('pageUnit')}', 
                         style: Theme.of(context).textTheme.bodyMedium
                       ),
                        Text(
-                        '共 ${widget.manga.chapters.length} 页', 
+                        '${l10n.tr('totalPrefix')} ${widget.manga.chapters.length} ${l10n.tr('pageUnit')}', 
                         style: Theme.of(context).textTheme.bodyMedium
                       ),
                     ],
@@ -415,6 +419,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage> {
 
 
   Widget _buildVerticalReader(MangaService mangaService) {
+    final l10n = context.l10n;
     return ListView.builder(
       controller: _scrollController,
       itemCount: widget.manga.chapters.length,
@@ -469,7 +474,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage> {
                       children: [
                         const Icon(Icons.broken_image, size: 48, color: Colors.grey),
                         const SizedBox(height: 8),
-                        Text('第 ${index + 1} 页加载失败', style: const TextStyle(color: Colors.grey)),
+                        Text('${l10n.tr('pagePrefix')} ${index + 1} ${l10n.tr('pageLoadFailedSuffix')}', style: const TextStyle(color: Colors.grey)),
                       ],
                     ),
                   ),
@@ -501,6 +506,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage> {
   }
 
   Widget _buildHorizontalReader(MangaService mangaService) {
+    final l10n = context.l10n;
     return PageView.builder(
       controller: _pageController,
       itemCount: widget.manga.chapters.length,
@@ -543,7 +549,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage> {
                       const Icon(Icons.broken_image, size: 48, color: Colors.white),
                       const SizedBox(height: 8),
                       Text(
-                        '第 ${index + 1} 页加载失败',
+                        '${l10n.tr('pagePrefix')} ${index + 1} ${l10n.tr('pageLoadFailedSuffix')}',
                         style: const TextStyle(color: Colors.white),
                       ),
                     ],

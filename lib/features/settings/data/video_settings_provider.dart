@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../auth/data/auth_provider.dart';
+import '../../../core/i18n/app_localizations.dart';
 
 enum VideoOrientation {
   landscape,
@@ -9,16 +10,16 @@ enum VideoOrientation {
   sensorLandscape,
   sensorPortrait;
 
-  String get label {
+  String label(AppLocalizations l10n) {
     switch (this) {
       case VideoOrientation.landscape:
-        return '横屏';
+        return l10n.videoOrientationLandscape;
       case VideoOrientation.portrait:
-        return '竖屏';
+        return l10n.videoOrientationPortrait;
       case VideoOrientation.sensorLandscape:
-        return '传感器横屏';
+        return l10n.videoOrientationSensorLandscape;
       case VideoOrientation.sensorPortrait:
-        return '传感器竖屏';
+        return l10n.videoOrientationSensorPortrait;
     }
   }
 
@@ -93,6 +94,10 @@ class VideoSettingsNotifier extends StateNotifier<VideoSettingsState> {
         orientationIndex >= 0 &&
         orientationIndex < VideoOrientation.values.length) {
       orientation = VideoOrientation.values[orientationIndex];
+    }
+
+    if (!mounted) {
+      return;
     }
 
     state = state.copyWith(
