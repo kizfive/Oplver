@@ -49,6 +49,7 @@ class WebDavService {
   webdav.Client? get client => _client;
   String? get baseUrl => _baseUrl;
   String? get username => _username;
+  String? get password => _password;
 
   // 获取认证头
   Map<String, String> get authHeaders {

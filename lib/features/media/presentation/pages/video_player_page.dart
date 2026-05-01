@@ -1,6 +1,7 @@
 // ignore_for_file: use_build_context_synchronously, deprecated_member_use
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -108,16 +109,100 @@ class _VideoPlayerPageState extends ConsumerState<VideoPlayerPage> {
       if (pathSegments.isNotEmpty && pathSegments.last.isEmpty) {
         pathSegments.removeLast();
       }
-      final fileSegments =
-          _currentFilePath.split('/').where((s) => s.isNotEmpty);
-      pathSegments.addAll(fileSegments);
-      final fullUri = baseUri.replace(pathSegments: pathSegments);
+      
+      // 使用更严格的手动编码方式，确保特殊字符（如全角括号）被正确编码
+      // 以避免某些严格的后端（例如阿里云盘、特定代理）返回 400 错误
+      final fileSegments = _currentFilePath.split('/').where((s) => s.isNotEmpty).map((s) => Uri.encodeComponent(s)).toList();
+      
+      // 我们不能直接用 baseUri.replace(pathSegments) 因为这会导致 dart 自动再次对我们手动编码的字符进行编码（双重编码）
+      // 而是通过直接拼接字符串来构造最终的 URL
+      final basePathStr = pathSegments.isNotEmpty ? '/${pathSegments.join('/')}' : '';
+      final filePathStr = fileSegments.isNotEmpty ? '/${fileSegments.join('/')}' : '';
+      
+      // 保持原始的 query 参数（如果有）
+      final queryStr = baseUri.hasQuery ? '?${baseUri.query}' : '';
+      
+      // 我们在此不仅手动编码路径，还有一种极为有效的手段解决部分 302 跨域 / 非法授权导致 400 的方案：
+      // 直接把账号密码塞进 URL 中形如 https://user:pass@domain.com/path
+      // ExoPlayer 看到这种格式通常会主动按需使用Basic Auth并妥善处理跨域 Redirect 免遭 400
+      String finalUrlString;
+      
+      // 不要在 URL 内拼接 authHost，因为部分网盘对 https://user:pass@host/path 这种写法依旧敏感并返回 400。
+      // 我们还是保留之前的拼接，并且通过修改 networkUrl 中将 `encodeComponent` 的使用更加精细。
+      // WebDAV 服务器通常不需要对 `() ` (括弧、空格) 进行双重编码。如果我们完全用 `encodeComponent` 会把空格编码成 %20 （这是对的）。
+      // 但是像 AliyunDrive / Alist 等服务对 URL 格式特别敏感。
+      
+      // 我们尝试一种最安全的方法：把之前通过 `Uri.replace` 拼接的 fullUri.toString() 进行重写
+      var pathSegmentsFixed = List<String>.from(baseUri.pathSegments);
+      if (pathSegmentsFixed.isNotEmpty && pathSegmentsFixed.last.isEmpty) {
+        pathSegmentsFixed.removeLast();
+      }
+      pathSegmentsFixed.addAll(_currentFilePath.split('/').where((s) => s.isNotEmpty));
 
+      // 自定义拼接并且**非常小心地**只对需要编码的路径进行编码
+      String buildPath(List<String> segments) {
+        return '/' + segments.map((s) => Uri.encodeComponent(s).replaceAll('+', '%20')).join('/');
+      }
+
+      final String customPath = buildPath(pathSegmentsFixed);
+      
+      String userInfo = '';
+      final String? webUsername = webDavService.username;
+      final String? webPassword = webDavService.password;
+      if (webUsername != null && webUsername.isNotEmpty && webPassword != null) {
+        userInfo = '${Uri.encodeComponent(webUsername)}:${Uri.encodeComponent(webPassword)}@';
+      }
+      finalUrlString = '${baseUri.scheme}://$userInfo${baseUri.host}${baseUri.hasPort ? ':${baseUri.port}' : ''}$customPath$queryStr';
+      
+      final Uri fullUri = Uri.parse(finalUrlString);
       debugPrint('Video URL: $fullUri');
 
+      // 尝试手动通过 Dart HttpClient 解析 302 重定向
+      // 这是为了拦截 WebDAV 下发的 OSS 重定向链接，剥离 Authorization 头再交给 ExoPlayer
+      String resolvedUrlString = finalUrlString;
+      Map<String, String> finalHeaders = {};
+      finalHeaders.addAll(webDavService.authHeaders);
+      
+      try {
+        final client = HttpClient();
+        // 我们只进行 GET 请求，禁止自动跳转
+        final request = await client.getUrl(fullUri);
+        
+        // 挂载初始身份验证请求头
+        finalHeaders.forEach((key, value) {
+          request.headers.set(key, value);
+        });
+        // 不允许自动追踪重定向
+        request.followRedirects = false;
+        
+        final response = await request.close();
+        
+        if (response.statusCode >= 300 && response.statusCode < 400) {
+          final location = response.headers.value(HttpHeaders.locationHeader);
+          if (location != null) {
+             // 拿到最新的真实下载地址（阿里云、腾讯云等OSS链接）
+             resolvedUrlString = fullUri.resolve(location).toString();
+             debugPrint('Dart manually intercepted Redirect (HTTP ${response.statusCode}): $resolvedUrlString');
+             
+             // 重定向地址不需要网盘验证，而且原先的 Authorization 往往会导致云存储签名失败导致 400 错误
+             // 所以，我们清空 headers 供后面正常播放使用
+             finalHeaders.clear(); 
+          }
+        }
+        
+        // 由于我们拦截用的是 GET，为了避免下载完整视频阻塞客户端或吃掉内存，我们要显式关闭 Body stream
+        response.listen((_) {}).cancel();
+        client.close();
+      } catch (e) {
+        debugPrint('Manual redirect resolution error: $e');
+      }
+
+      final Uri resolvedUri = Uri.parse(resolvedUrlString);
+      debugPrint('Final Playback URL: $resolvedUri');
+
       _videoPlayerController = VideoPlayerController.networkUrl(
-        fullUri,
-        httpHeaders: webDavService.authHeaders,
+        resolvedUri,
+        httpHeaders: finalHeaders,  
         videoPlayerOptions: VideoPlayerOptions(
           mixWithOthers: true,
           allowBackgroundPlayback: false,
