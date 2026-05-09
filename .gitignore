@@ -87,3 +87,6 @@ app_runtime.log
 *.txt
 
 *.example
+
+# Claude Code configuration
+.claude/

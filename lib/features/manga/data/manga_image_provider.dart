@@ -18,10 +18,9 @@ final resolvedMangaImageProvider = FutureProvider.family.autoDispose<String?, St
   return mangaService.resolveImageUrl(imagePath);
 });
 
-/// 漫画封面图片Provider (使用缩略图)
+/// 漫画封面图片Provider (返回略缩图URL，由CachedNetworkImage缓存)
 final resolvedMangaCoverProvider = FutureProvider.family.autoDispose<String?, String>((ref, imagePath) async {
   ref.keepAlive();
   final mangaService = ref.read(mangaServiceProvider);
-  // 修改为：优先下载并缓存到本地，返回本地文件路径
-  return mangaService.downloadAndCacheCover(imagePath);
+  return mangaService.resolveCoverUrl(imagePath);
 });

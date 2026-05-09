@@ -435,24 +435,33 @@ class MangaService {
     return images;
   }
 
-  /// 自然排序比较函数
+  /// 自然排序比较函数（逐段比较，数字按数值、文本按字典序）
+  /// 只比较文件名部分，避免目录路径中的数字干扰排序
   int _compareNaturally(String a, String b) {
-    final RegExp numberRegex = RegExp(r'\d+');
-    final Iterable<Match> aMatches = numberRegex.allMatches(a);
-    final Iterable<Match> bMatches = numberRegex.allMatches(b);
+    final nameA = p.basename(a);
+    final nameB = p.basename(b);
 
-    if (aMatches.isEmpty && bMatches.isEmpty) {
-      return a.compareTo(b);
+    final RegExp segmentRegex = RegExp(r'\d+|\D+');
+    final aMatches = segmentRegex.allMatches(nameA).toList();
+    final bMatches = segmentRegex.allMatches(nameB).toList();
+
+    for (int i = 0; i < aMatches.length && i < bMatches.length; i++) {
+      final aStr = aMatches[i].group(0)!;
+      final bStr = bMatches[i].group(0)!;
+
+      final aNum = int.tryParse(aStr);
+      final bNum = int.tryParse(bStr);
+
+      if (aNum != null && bNum != null) {
+        final cmp = aNum.compareTo(bNum);
+        if (cmp != 0) return cmp;
+      } else {
+        final cmp = aStr.toLowerCase().compareTo(bStr.toLowerCase());
+        if (cmp != 0) return cmp;
+      }
     }
 
-    if (aMatches.isEmpty) return -1;
-    if (bMatches.isEmpty) return 1;
-
-    // 提取第一个数字进行比较
-    final int aNum = int.tryParse(aMatches.first.group(0) ?? '0') ?? 0;
-    final int bNum = int.tryParse(bMatches.first.group(0) ?? '0') ?? 0;
-    
-    return aNum.compareTo(bNum);
+    return aMatches.length.compareTo(bMatches.length);
   }
 
   /// 获取漫画封面图片URL
@@ -581,73 +590,23 @@ class MangaService {
     return null;
   }
 
-  /// 下载并缓存漫画封面
-  /// 返回本地文件路径
-  Future<String?> downloadAndCacheCover(String imagePath) async {
-     try {
-       // 1. 生成简单唯一的文件名
-       final fileName = 'cover_${imagePath.hashCode}.jpg';
+  /// 获取漫画封面URL（优先使用API略缩图，不下载整图）
+  Future<String?> resolveCoverUrl(String imagePath) async {
+    if (isApiMode()) {
+      final apiService = ref.read(openListApiServiceProvider);
+      try {
+        final fileInfo = await apiService.getFileInfo(imagePath);
+        // 优先使用API略缩图（/api/fs/thumb），更轻量
+        if (fileInfo?.thumb != null && fileInfo!.thumb!.isNotEmpty) {
+          return fileInfo.thumb;
+        }
+      } catch (e) {
+        debugPrint('获取封面略缩图失败: $e');
+      }
+    }
 
-       // 2. 获取缓存目录
-       final cacheDir = await getApplicationDocumentsDirectory();
-       final coversDir = Directory(p.join(cacheDir.path, 'manga_covers'));
-       if (!coversDir.existsSync()) {
-         coversDir.createSync(recursive: true);
-       }
-       
-       final file = File(p.join(coversDir.path, fileName));
-       
-       // 3. 检查文件是否存在且有效
-       if (file.existsSync() && file.lengthSync() > 0) {
-         return file.path;
-       }
-       
-       // 4. 获取下载链接
-       final apiService = ref.read(openListApiServiceProvider);
-       // 4.1 优先尝试使用API获取文件详情中的略缩图 (API模式下更可靠)
-       if (isApiMode()) {
-         try {
-           final fileInfo = await apiService.getFileInfo(imagePath);
-           // 如果有略缩图且不为空，优先使用略缩图链接 (通常是 /api/fs/thumb)
-           if (fileInfo?.thumb != null && fileInfo!.thumb!.isNotEmpty) {
-              final url = fileInfo.thumb!;
-              // 略缩图API肯定需要API Header
-              final headers = getAuthHeaders();
-              final response = await http.get(Uri.parse(url), headers: headers);
-              if (response.statusCode == 200) {
-                 await file.writeAsBytes(response.bodyBytes);
-                 return file.path;
-              }
-           }
-         } catch (e) {
-           debugPrint('尝试获取详情下载封面失败：$e');
-         }
-       }
-
-       // 4.2 如果并没有获取到thumb或者不在API模式，走回退逻辑
-       final url = await resolveThumbnailUrl(imagePath);
-       if (url == null) return null;
-       
-       Map<String, String>? headers;
-       if (url.contains('/dav/')) {
-          final webdavService = ref.read(webDavServiceProvider);
-          headers = webdavService.authHeaders;
-       } else {
-          headers = getHeadersForUrl(url);
-       }
-       
-       final response = await http.get(Uri.parse(url), headers: headers);
-       if (response.statusCode == 200) {
-         await file.writeAsBytes(response.bodyBytes);
-         return file.path;
-       } else {
-         debugPrint('下载封面失败: ${response.statusCode} URL: $url');
-         return null;
-       }
-     } catch (e) {
-       debugPrint('缓存封面异常: $e');
-       return null;
-     }
+    // 回退到通用URL解析
+    return await resolveThumbnailUrl(imagePath);
   }
 
   /// 清除封面缓存

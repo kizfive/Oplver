@@ -8,6 +8,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:path/path.dart' as path_context;
 import '../../application/download_service.dart';
 import '../../../../features/auth/data/auth_provider.dart';
+import '../../../../core/network/openlist_service.dart';
 import '../../../../core/utils/file_utils.dart';
 import '../../../../core/enums/download_mode.dart';
 import '../../../../features/settings/data/general_settings_provider.dart';
@@ -17,7 +18,6 @@ import '../../../history/data/file_history_provider.dart';
 import 'package:intl/intl.dart';
 import 'dart:math'; // Import for Random
 import 'package:webdav_client/webdav_client.dart' as webdav;
-import '../../../../features/settings/data/general_settings_provider.dart';
 import '../../../../features/settings/data/video_settings_provider.dart';
 import '../../../../features/media/data/video_playback_history_provider.dart';
 import '../widgets/video_thumbnail_image.dart';
@@ -732,12 +732,14 @@ class _FileBrowserPageState extends ConsumerState<FileBrowserPage> {
         basePathSegments.removeLast();
       }
 
+      // 使用手动编码构造URL，避免 Uri.replace 双重编码导致部分服务器400
+      final fileSegments = currentPath.split('/').where((s) => s.isNotEmpty).toList();
+      final basePathStr = basePathSegments.isNotEmpty ? '/${basePathSegments.join('/')}' : '';
+
       final imageUrls = imageFiles.map((f) {
-        var pathSegments = <String>[];
-        pathSegments.addAll(basePathSegments);
-        pathSegments.addAll(currentPath.split('/').where((s) => s.isNotEmpty));
-        pathSegments.add(f.name ?? '');
-        return baseUri.replace(pathSegments: pathSegments).toString();
+        final allSegments = [...fileSegments, f.name ?? ''];
+        final encodedPath = '/' + allSegments.map((s) => Uri.encodeComponent(s).replaceAll('+', '%20')).join('/');
+        return '${baseUri.scheme}://${baseUri.host}${baseUri.hasPort ? ':${baseUri.port}' : ''}$basePathStr$encodedPath';
       }).toList();
 
       final initialIndex = imageFiles.indexWhere((f) => f.name == file.name);
@@ -1531,37 +1533,33 @@ class _FileListItem extends ConsumerWidget {
           final fullPath = pathContext.join(currentPath, file.name ?? '');
           final apiThumbUrl = fileState.thumbnails[fullPath];
 
-          // 2. Construct WebDAV URL as fallback
+          // 2. Construct WebDAV URL as fallback (手动编码，参照视频播放器的URL构造方式)
           final Uri baseUri = Uri.parse(webDavService.baseUrl!);
-          var pathSegments = <String>[];
-          pathSegments.addAll(baseUri.pathSegments);
-          if (pathSegments.isNotEmpty && pathSegments.last == '') {
-            pathSegments.removeLast();
+          var baseSegments = List<String>.from(baseUri.pathSegments);
+          if (baseSegments.isNotEmpty && baseSegments.last == '') {
+            baseSegments.removeLast();
           }
-          var dirSegments = currentPath.split('/').where((s) => s.isNotEmpty);
-          pathSegments.addAll(dirSegments);
-          if (file.name != null) {
-            pathSegments.add(file.name!);
-          }
-          final webDavUri = baseUri.replace(pathSegments: pathSegments);
+          final dirSegments = currentPath.split('/').where((s) => s.isNotEmpty).toList();
+          final allSegments = [...dirSegments, if (file.name != null) file.name!];
+          final encodedPath = '/' + allSegments.map((s) => Uri.encodeComponent(s).replaceAll('+', '%20')).join('/');
+          final basePathStr = baseSegments.isNotEmpty ? '/${baseSegments.join('/')}' : '';
+          final webDavUrlStr = '${baseUri.scheme}://${baseUri.host}${baseUri.hasPort ? ':${baseUri.port}' : ''}$basePathStr$encodedPath';
           
-          final imageUrl = apiThumbUrl ?? webDavUri.toString();
+          final imageUrl = apiThumbUrl ?? webDavUrlStr;
+
+          // 根据URL类型选择正确的认证头：API thumb用API token，WebDAV用Basic Auth
+          final apiService = ref.read(openListApiServiceProvider);
+          final isApiThumb = apiThumbUrl != null;
+          final effectiveHeaders = isApiThumb
+              ? apiService.authHeaders
+              : webDavService.authHeaders;
 
           leadingWidget = ThumbnailContainer(
             backgroundColor: placeholderColor,
             typeIcon: Icons.image,
             child: CachedNetworkImage(
               imageUrl: imageUrl,
-              httpHeaders: apiThumbUrl != null
-                  ? null // API URLs might not need standard WebDAV auth headers, or need different ones. Assume public/token embedded for now or null.
-                  // Actually, generic API thumbs in Alist usually require the same token header if private.
-                  // But often 'thumb' is a signed URL or public. 
-                  // If it's pure API, maybe we need 'Authorization': token. 
-                  // Let's assume Alist thumb URL carries signature or is used with user token.
-                  // For safety, let's pass headers if it's NOT an API thumb (WebDAV), 
-                  // OR if it IS API thumb, we might need to check if it needs auth.
-                  // But to verify the STRATEGY: 
-                  : webDavService.authHeaders,
+              httpHeaders: effectiveHeaders,
               memCacheHeight: 200,
               fit: BoxFit.contain,
               imageBuilder: (context, imageProvider) => Image(
@@ -1573,18 +1571,10 @@ class _FileListItem extends ConsumerWidget {
                   color: theme.colorScheme.onPrimaryContainer
                       .withValues(alpha: 0.5)),
               errorWidget: (context, url, error) {
-                // FALLBACK STRATEGY VERIFICATION LOGIC
-                if (imageUrl != webDavUri.toString()) {
-                   // If current URL was API thumb and failed, we could try to reload with WebDAV URI?
-                   // However, CachedNetworkImage errorWidget is a widget builder, not a retry mechanism.
-                   // To implement true fallback (API -> Fail -> WebDAV), we need a smarter widget or state.
-                   // But for now, if API Enhancement is on, we prefer API thumb. 
-                   // If that fails, the user will see an error icon.
-                   // THE USER ASKED FOR FALLBACK STRATEGY.
-                   // "如果失败然后才是webdav下载原图"
-                   // So I MUST implement the fallback.
+                // API缩略图失败 → 回退到WebDAV原图
+                if (isApiThumb) {
                    return CachedNetworkImage(
-                     imageUrl: webDavUri.toString(),
+                     imageUrl: webDavUrlStr,
                      httpHeaders: webDavService.authHeaders,
                      memCacheHeight: 200,
                      fit: BoxFit.contain,
