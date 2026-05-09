@@ -90,3 +90,6 @@ app_runtime.log
 
 # Claude Code configuration
 .claude/
+.vscode/
+GITHUB_UPLOAD_CHECKLIST.md
+test/
