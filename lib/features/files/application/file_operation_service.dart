@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:webdav_client/webdav_client.dart' as webdav;
 import 'dart:typed_data';
 import '../../../core/network/openlist_service.dart';
+import '../../../core/services/log_service.dart';
 import '../../settings/data/general_settings_provider.dart';
 import '../../auth/data/auth_provider.dart';
 
@@ -30,7 +31,7 @@ class FileOperationService {
         }
         return true;
       } catch (e) {
-        debugPrint('WebDAV 删除文件失败: $e');
+        logError('FileOp', 'WebDAV删除失败: $e', e);
         return false;
       }
     }
@@ -52,7 +53,7 @@ class FileOperationService {
         await webdavService.client!.rename(oldPath, newPath, false);
         return true;
       } catch (e) {
-        debugPrint('WebDAV 重命名文件失败: $e');
+        logError('FileOp', 'WebDAV重命名失败: $e', e);
         return false;
       }
     }
@@ -75,7 +76,7 @@ class FileOperationService {
         }
         return true;
       } catch (e) {
-        debugPrint('WebDAV 移动文件失败: $e');
+        logError('FileOp', 'WebDAV移动失败: $e', e);
         return false;
       }
     }
@@ -98,7 +99,7 @@ class FileOperationService {
         }
         return true;
       } catch (e) {
-        debugPrint('WebDAV 复制文件失败: $e');
+        logError('FileOp', 'WebDAV复制失败: $e', e);
         return false;
       }
     }
@@ -117,7 +118,7 @@ class FileOperationService {
         await webdavService.client!.mkdir(path);
         return true;
       } catch (e) {
-        debugPrint('WebDAV 创建文件夹失败: $e');
+        logError('FileOp', 'WebDAV创建文件夹失败: $e', e);
         return false;
       }
     }
@@ -138,7 +139,7 @@ class FileOperationService {
         await webdavService.client!.write(filePath, Uint8List.fromList(fileBytes));
         return true;
       } catch (e) {
-        debugPrint('WebDAV 上传文件失败: $e');
+        logError('FileOp', 'WebDAV上传失败: $e', e);
         return false;
       }
     }

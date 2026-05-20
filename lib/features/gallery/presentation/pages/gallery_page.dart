@@ -40,11 +40,11 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
           )
         ],
       ),
-      body: _buildBody(state),
+      body: _buildBody(state, l10n),
     );
   }
 
-  Widget _buildBody(GalleryState state) {
+  Widget _buildBody(GalleryState state, AppLocalizations l10n) {
     if (state.isLoading) {
       return const Center(child: CircularProgressIndicator());
     }

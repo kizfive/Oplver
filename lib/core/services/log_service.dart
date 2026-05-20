@@ -54,18 +54,23 @@ class LogService {
       _logFile = File('${directory.path}/app_runtime.log');
 
       if (_enabled && await _logFile!.exists()) {
-        final content = await _logFile!.readAsString();
-        final lines = content.split('\n');
-        for (var line in lines.take(_maxLogs)) {
-          if (line.trim().isNotEmpty) {
-            _parseLine(line);
+        try {
+          final content = await _logFile!.readAsString();
+          final lines = content.split('\n');
+          for (var line in lines.take(_maxLogs)) {
+            if (line.trim().isNotEmpty) {
+              _parseLine(line);
+            }
           }
+        } on Exception {
+          // 文件损坏（UTF-8 解码失败、I/O 错误等），删除重建
+          await _logFile!.delete();
         }
       }
 
       _initialized = true;
       if (_enabled) {
-        _writeToFile(LogEntry(
+        _writeToFileSync(LogEntry(
           timestamp: DateTime.now(),
           level: LogLevel.info,
           tag: 'LogService',
@@ -148,16 +153,16 @@ class LogService {
       debugPrint(entry.toString());
     }
 
-    // 异步写入文件
-    _writeToFile(entry);
+    // 同步写入文件，避免并发写入损坏
+    _writeToFileSync(entry);
   }
 
-  /// 写入日志文件
-  Future<void> _writeToFile(LogEntry entry) async {
+  /// 同步写入日志文件
+  void _writeToFileSync(LogEntry entry) {
     if (_logFile == null || !_enabled) return;
 
     try {
-      await _logFile!.writeAsString(
+      _logFile!.writeAsStringSync(
         '${entry.toString()}\n',
         mode: FileMode.append,
       );

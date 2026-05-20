@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
-import 'dart:async'; // Added for Completer
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
 import 'package:webdav_client/webdav_client.dart' as webdav;
 import '../../../auth/data/auth_provider.dart';
+import '../../../../core/services/log_service.dart';
 
 class VideoThumbnailImage extends ConsumerStatefulWidget {
   final webdav.File file;
@@ -103,31 +104,30 @@ class _VideoThumbnailImageState extends ConsumerState<VideoThumbnailImage> {
       }
 
       final Uri baseUri = Uri.parse(webDavService.baseUrl!);
-      var pathSegments = List<String>.from(baseUri.pathSegments);
-      if (pathSegments.isNotEmpty && pathSegments.last.isEmpty) {
-        pathSegments.removeLast();
-      }
-
+      final baseSegments = baseUri.pathSegments
+          .where((s) => s.isNotEmpty)
+          .toList();
       final dirSegments =
           widget.currentPath.split('/').where((s) => s.isNotEmpty);
-      pathSegments.addAll(dirSegments);
-      if (widget.file.name != null) {
-        pathSegments.add(widget.file.name!);
-      }
+      final allSegments = [
+        ...baseSegments,
+        ...dirSegments,
+        if (widget.file.name != null) widget.file.name!,
+      ];
+      final encodedPath = '/' +
+          allSegments
+              .map((s) => Uri.encodeComponent(s).replaceAll('+', '%20'))
+              .join('/');
+      final queryStr = baseUri.hasQuery ? '?${baseUri.query}' : '';
+      final videoUrl = '${baseUri.scheme}://${baseUri.host}'
+          '${baseUri.hasPort ? ':${baseUri.port}' : ''}$encodedPath$queryStr';
 
-      final fullUri = baseUri.replace(pathSegments: pathSegments);
+      logDebug('VideoThumb', '生成略缩图: ${widget.file.name}');
 
-      // Use the global queue to limit concurrent requests
       _loadTask = _ThumbnailQueue.instance.schedule(() async {
         try {
-          // Add a small delay for retries to avoid hammering the socket immediately after a change
-          if (widget.file.name!.contains('_retry')) {
-            // Placeholder condition, logic handled by timeMs change
-            await Future.delayed(const Duration(milliseconds: 300));
-          }
-
           return await VideoThumbnail.thumbnailData(
-            video: fullUri.toString(),
+            video: videoUrl,
             imageFormat: ImageFormat.JPEG,
             maxWidth: 320,
             timeMs: widget.timeMs,
@@ -135,7 +135,8 @@ class _VideoThumbnailImageState extends ConsumerState<VideoThumbnailImage> {
             headers: webDavService.authHeaders,
           );
         } catch (e) {
-          debugPrint('Thumbnail download error inside task: $e');
+          // 单次取帧失败是预期的（网络波动、首包未到），最终可能重试成功
+          logDebug('VideoThumb', '取帧重试: ${widget.file.name}');
           return null;
         }
       });
@@ -156,10 +157,9 @@ class _VideoThumbnailImageState extends ConsumerState<VideoThumbnailImage> {
       }
     } catch (e) {
       if (e == 'Cancelled') {
-        // Task was cancelled, ignore
         return;
       }
-      debugPrint('Error generating thumbnail for ${widget.file.name}: $e');
+      logWarning('VideoThumb', '略缩图生成失败 ${widget.file.name}: $e');
       if (mounted) {
         setState(() {
           _error = true;

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../../../core/network/openlist_api_service.dart';
-import '../../../core/network/openlist_service.dart';
-import '../../../core/network/webdav_service.dart';
-import '../../settings/data/general_settings_provider.dart';
+import '../../../../core/network/openlist_api_service.dart';
+import '../../../../core/network/openlist_service.dart';
+import '../../../../core/network/webdav_service.dart';
+import '../../../auth/data/auth_provider.dart';
+import '../../../settings/data/general_settings_provider.dart';
 
 /// 增强的缩略图组件，优先使用API获取缩略图
 class EnhancedThumbnailWidget extends ConsumerWidget {
