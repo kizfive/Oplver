@@ -49,7 +49,7 @@ class AboutPage extends StatelessWidget {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'v1.5.0',
+                          'v1.6.0',
                           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                                 color: Theme.of(context).colorScheme.onSurfaceVariant,
                               ),
