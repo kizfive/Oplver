@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import '../services/log_service.dart';
 import 'openlist_models.dart';
 
 /// OpenList API 服务
@@ -45,15 +46,15 @@ class OpenListApiService {
         if (apiResponse.isSuccess && apiResponse.data?.token != null) {
           _token = apiResponse.data!.token;
           _headers['Authorization'] = _token!;
-          debugPrint('OpenList API 登录成功');
+          logInfo('API', 'POST /api/auth/login → 200 登录成功');
           return true;
         }
       }
 
-      debugPrint('OpenList API 登录失败: ${response.statusCode}');
+      logWarning('API', 'POST /api/auth/login → ${response.statusCode}');
       return false;
     } catch (e) {
-      debugPrint('OpenList API 登录错误: $e');
+      logError('API', 'POST /api/auth/login 异常', e);
       return false;
     }
   }
@@ -117,11 +118,13 @@ class OpenListApiService {
         );
 
         if (apiResponse.isSuccess) {
+          logDebug('API', 'POST /api/fs/list path=$path → 200 (${apiResponse.data?.content.length ?? 0} 项)');
           return apiResponse.data;
         }
       }
+      logWarning('API', 'POST /api/fs/list path=$path → ${response.statusCode}');
     } catch (e) {
-      debugPrint('列出文件失败: $e');
+      logError('API', 'POST /api/fs/list path=$path 异常', e);
     }
     return null;
   }
@@ -152,15 +155,13 @@ class OpenListApiService {
         body: jsonEncode(body),
       );
 
-      debugPrint('搜索响应: ${response.statusCode} ${response.body}');
-
       if (response.statusCode == 200) {
         final jsonMap = jsonDecode(response.body);
         // 处理分页格式的搜索结果
         // 搜索结果通常是 { "code": 200, "data": { "content": [...], "total": 10 } }
-        
+
         List<SearchResult> searchResults = [];
-        
+
         if (jsonMap['code'] == 200 && jsonMap['data'] != null) {
           final data = jsonMap['data'];
           if (data is List) {
@@ -175,11 +176,13 @@ class OpenListApiService {
                 .toList();
           }
         }
-        
+
+        logDebug('API', 'POST /api/fs/search "$keywords" → 200 (${searchResults.length} 项)');
         return searchResults;
       }
+      logWarning('API', 'POST /api/fs/search "$keywords" → ${response.statusCode}');
     } catch (e) {
-      debugPrint('搜索文件失败: $e');
+      logError('API', 'POST /api/fs/search 异常', e);
     }
     return [];
   }
@@ -243,10 +246,13 @@ class OpenListApiService {
           jsonDecode(response.body),
           null,
         );
-        return apiResponse.isSuccess;
+        final ok = apiResponse.isSuccess;
+        logDebug('API', 'POST /api/fs/rename $path → $newName (${ok ? "OK" : response.statusCode})');
+        return ok;
       }
+      logWarning('API', 'POST /api/fs/rename $path → ${response.statusCode}');
     } catch (e) {
-      debugPrint('重命名文件失败: $e');
+      logError('API', 'POST /api/fs/rename $path 异常', e);
     }
     return false;
   }
@@ -270,10 +276,13 @@ class OpenListApiService {
           jsonDecode(response.body),
           null,
         );
-        return apiResponse.isSuccess;
+        final ok = apiResponse.isSuccess;
+        logDebug('API', 'POST /api/fs/remove $path (${names.length}项) → ${ok ? "OK" : response.statusCode}');
+        return ok;
       }
+      logWarning('API', 'POST /api/fs/remove $path → ${response.statusCode}');
     } catch (e) {
-      debugPrint('删除文件失败: $e');
+      logError('API', 'POST /api/fs/remove $path 异常', e);
     }
     return false;
   }
@@ -298,10 +307,13 @@ class OpenListApiService {
           jsonDecode(response.body),
           null,
         );
-        return apiResponse.isSuccess;
+        final ok = apiResponse.isSuccess;
+        logDebug('API', 'POST /api/fs/move $srcDir → $dstDir (${names.length}项) → ${ok ? "OK" : response.statusCode}');
+        return ok;
       }
+      logWarning('API', 'POST /api/fs/move $srcDir → ${response.statusCode}');
     } catch (e) {
-      debugPrint('移动文件失败: $e');
+      logError('API', 'POST /api/fs/move $srcDir 异常', e);
     }
     return false;
   }
@@ -326,10 +338,13 @@ class OpenListApiService {
           jsonDecode(response.body),
           null,
         );
-        return apiResponse.isSuccess;
+        final ok = apiResponse.isSuccess;
+        logDebug('API', 'POST /api/fs/copy $srcDir → $dstDir (${names.length}项) → ${ok ? "OK" : response.statusCode}');
+        return ok;
       }
+      logWarning('API', 'POST /api/fs/copy $srcDir → ${response.statusCode}');
     } catch (e) {
-      debugPrint('复制文件失败: $e');
+      logError('API', 'POST /api/fs/copy $srcDir 异常', e);
     }
     return false;
   }
@@ -350,10 +365,13 @@ class OpenListApiService {
           jsonDecode(response.body),
           null,
         );
-        return apiResponse.isSuccess;
+        final ok = apiResponse.isSuccess;
+        logDebug('API', 'POST /api/fs/mkdir $path → ${ok ? "OK" : response.statusCode}');
+        return ok;
       }
+      logWarning('API', 'POST /api/fs/mkdir $path → ${response.statusCode}');
     } catch (e) {
-      debugPrint('创建文件夹失败: $e');
+      logError('API', 'POST /api/fs/mkdir $path 异常', e);
     }
     return false;
   }
@@ -390,12 +408,14 @@ class OpenListApiService {
           jsonDecode(response.body),
           null,
         );
-        return apiResponse.isSuccess;
+        final ok = apiResponse.isSuccess;
+        logDebug('API', 'PUT /api/fs/put $filePath → ${ok ? "OK" : response.statusCode}');
+        return ok;
       } else {
-        debugPrint('上传失败: ${response.statusCode} - ${response.body}');
+        logWarning('API', 'PUT /api/fs/put $filePath → ${response.statusCode}');
       }
     } catch (e) {
-      debugPrint('上传文件失败: $e');
+      logError('API', 'PUT /api/fs/put 异常', e);
     }
     return false;
   }
@@ -418,11 +438,13 @@ class OpenListApiService {
         );
 
         if (apiResponse.isSuccess) {
+          logDebug('API', 'POST /api/fs/get path=$path → 200');
           return apiResponse.data;
         }
       }
+      logWarning('API', 'POST /api/fs/get path=$path → ${response.statusCode}');
     } catch (e) {
-      debugPrint('获取文件信息失败: $e');
+      logError('API', 'POST /api/fs/get path=$path 异常', e);
     }
     return null;
   }

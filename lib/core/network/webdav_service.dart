@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:webdav_client/webdav_client.dart' as webdav;
+import '../services/log_service.dart';
 
 class WebDavService {
   webdav.Client? _client;
@@ -31,6 +32,7 @@ class WebDavService {
 
     try {
       // 尝试列出根目录文件以验证连接和权限
+      logInfo('WebDAV', '尝试连接 $cleanUrl');
       await _client!.readDir('/');
 
       // 保存连接信息以便生成播放链接
@@ -38,9 +40,10 @@ class WebDavService {
       _username = username;
       _password = password;
 
+      logInfo('WebDAV', '连接成功 $cleanUrl');
       return true;
     } catch (e) {
-      debugPrint('WebDAV 连接失败: $e');
+      logWarning('WebDAV', '连接失败 $cleanUrl: $e');
       _client = null;
       return false;
     }

@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
 
 /// 日志级别
@@ -18,7 +19,7 @@ class LogService {
   LogService._internal();
 
   final List<LogEntry> _logs = [];
-  final int _maxLogs = 1000; // 最多保留1000条日志
+  final int _maxLogs = 1000;
   File? _logFile;
   bool _initialized = false;
   bool _enabled = false;
@@ -26,17 +27,32 @@ class LogService {
   bool get isEnabled => _enabled;
 
   Future<void> setEnabled(bool enabled) async {
+    final wasDisabled = !_enabled;
     _enabled = enabled;
+    // 如果从关闭变成开启，且之前初始化失败，则重试初始化
+    if (wasDisabled && enabled && !_initialized) {
+      await initialize();
+    }
   }
 
   /// 初始化日志服务
   Future<void> initialize() async {
-    if (_initialized) return;
-    
+    if (_initialized && _logFile != null) return;
+
     try {
+      // 从持久化存储恢复开关状态
+      final prefs = await SharedPreferences.getInstance();
+      final keys = prefs.getKeys().where((k) => k.startsWith('enable_runtime_logs'));
+      for (final key in keys) {
+        if (prefs.getBool(key) == true) {
+          _enabled = true;
+          break;
+        }
+      }
+
       final directory = await getApplicationDocumentsDirectory();
       _logFile = File('${directory.path}/app_runtime.log');
-      
+
       if (_enabled && await _logFile!.exists()) {
         final content = await _logFile!.readAsString();
         final lines = content.split('\n');
@@ -46,11 +62,19 @@ class LogService {
           }
         }
       }
-      
+
       _initialized = true;
-      log(LogLevel.info, 'LogService', '日志服务已初始化');
+      if (_enabled) {
+        _writeToFile(LogEntry(
+          timestamp: DateTime.now(),
+          level: LogLevel.info,
+          tag: 'LogService',
+          message: '日志服务已初始化',
+        ));
+      }
     } catch (e) {
       debugPrint('日志服务初始化失败: $e');
+      // _initialized 保持 false，下次调用 initialize() 可重试
     }
   }
 
@@ -97,6 +121,11 @@ class LogService {
   /// 记录日志
   void log(LogLevel level, String tag, String message, [Object? error, StackTrace? stackTrace]) {
     if (!_enabled) return;
+    // 如果初始化未完成（上次失败了），触发重试
+    if (!_initialized) {
+      initialize();
+      return;
+    }
 
     final entry = LogEntry(
       timestamp: DateTime.now(),

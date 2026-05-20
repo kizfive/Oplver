@@ -14,17 +14,19 @@ import 'core/ui/global_scaffold_messenger.dart';
 class MyHttpOverrides extends HttpOverrides {
   @override
   HttpClient createHttpClient(SecurityContext? context) {
-    return super.createHttpClient(context)..maxConnectionsPerHost = 10;
+    return super.createHttpClient(context)
+      ..maxConnectionsPerHost = 10
+      ..connectionTimeout = const Duration(seconds: 10);
   }
 }
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // 初始化日志服务
   await appLogger.initialize();
   logInfo('App', '应用启动');
-  
+
   HttpOverrides.global = MyHttpOverrides();
   
   runApp(

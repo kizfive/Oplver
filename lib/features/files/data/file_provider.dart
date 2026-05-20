@@ -5,6 +5,7 @@ import 'package:lpinyin/lpinyin.dart'; // Add Pinyin support
 import '../../auth/data/auth_provider.dart';
 import '../../settings/data/general_settings_provider.dart';
 import '../../../core/network/openlist_service.dart';
+import '../../../core/services/log_service.dart';
 import 'file_sort_enums.dart';
 import 'sort_settings_provider.dart';
 
@@ -129,8 +130,10 @@ class FileBrowserNotifier extends StateNotifier<FileBrowserState> {
         final apiService = ref.read(openListApiServiceProvider);
         if (apiService.isConnected) {
           try {
+            logDebug('FileBrowser', '列出目录(API): $path');
             final fileList = await apiService.listFiles(path);
             if (fileList != null) {
+              logDebug('FileBrowser', '列出目录(API) $path → ${fileList.content.length} 项');
               // 转换 FileInfo 到 webdav.File
               final files = fileList.content.map((info) {
                 return webdav.File(
@@ -165,7 +168,7 @@ class FileBrowserNotifier extends StateNotifier<FileBrowserState> {
             }
           } catch (e) {
             // API 失败，降级到 WebDAV
-            // debugPrint('API listing failed, falling back to WebDAV: $e');
+            logWarning('FileBrowser', 'API列出目录失败 $path: $e，降级到WebDAV');
           }
         }
       }
@@ -179,7 +182,9 @@ class FileBrowserNotifier extends StateNotifier<FileBrowserState> {
       // 确保路径格式正确
       final fetchPath = path.endsWith('/') ? path : '$path/';
 
+      logDebug('FileBrowser', '列出目录(WebDAV): $fetchPath');
       final list = await _client!.readDir(fetchPath);
+      logDebug('FileBrowser', '列出目录(WebDAV) $fetchPath → ${list.length} 项');
 
       _sortFiles(list, state.sortOption, state.sortOrder);
 
@@ -190,6 +195,7 @@ class FileBrowserNotifier extends StateNotifier<FileBrowserState> {
         isLoading: false,
       );
     } catch (e) {
+      logError('FileBrowser', '列出目录失败 $path: $e', e);
       state = state.copyWith(isLoading: false, error: '加载失败: $e');
     }
   }
@@ -249,38 +255,49 @@ class FileBrowserNotifier extends StateNotifier<FileBrowserState> {
       return (code >= 0x4E00 && code <= 0x9FFF);
     }
 
-    // Helper to detect if string starts with English letter
-    // bool isLetter(String s) {
-    //   if (s.isEmpty) return false;
-    //   final code = s.toLowerCase().codeUnitAt(0);
-    //   return (code >= 97 && code <= 122);
-    // }
-
     final isChineseA = isChinese(strA);
     final isChineseB = isChinese(strB);
 
-    // Rule 1: Chinese always before non-Chinese (including English)
+    // Rule 1: Chinese always before non-Chinese
     if (isChineseA && !isChineseB) return -1;
     if (!isChineseA && isChineseB) return 1;
 
-    // Rule 2: If both are Chinese, sort by Pinyin
+    // Rule 2: If both are Chinese, sort by Pinyin with natural number order
     if (isChineseA && isChineseB) {
       final pinyinA = PinyinHelper.getPinyin(strA,
           separator: '', format: PinyinFormat.WITHOUT_TONE);
       final pinyinB = PinyinHelper.getPinyin(strB,
           separator: '', format: PinyinFormat.WITHOUT_TONE);
-      return pinyinA.toLowerCase().compareTo(pinyinB.toLowerCase());
+      return _compareNatural(pinyinA, pinyinB);
     }
 
-    // Rule 3: Natural sort for mixed English/Special Characters
-    // We want English letters to be sorted nicely, but non-letters (like symbols) might come after?
-    // User requested: Chinese > English.
-    // What about Symbols vs English? usually Symbols > English in standard ASCII.
-    // Let's stick to standard compare for non-Chinese parts,
-    // BUT we need to handle the case where one is English and one is Symbol if we want strict ordering.
-    // For now, let's trust standard compare for non-Chinese items unless user complains about symbols.
+    // Rule 3: Natural sort for non-Chinese (数字按数值排序)
+    return _compareNatural(strA, strB);
+  }
 
-    return strA.toLowerCase().compareTo(strB.toLowerCase());
+  /// 自然排序：逐段比较，数字按数值、文本按字典序
+  int _compareNatural(String a, String b) {
+    final RegExp segmentRegex = RegExp(r'\d+|\D+');
+    final aMatches = segmentRegex.allMatches(a).toList();
+    final bMatches = segmentRegex.allMatches(b).toList();
+
+    for (int i = 0; i < aMatches.length && i < bMatches.length; i++) {
+      final aStr = aMatches[i].group(0)!;
+      final bStr = bMatches[i].group(0)!;
+
+      final aNum = int.tryParse(aStr);
+      final bNum = int.tryParse(bStr);
+
+      if (aNum != null && bNum != null) {
+        final cmp = aNum.compareTo(bNum);
+        if (cmp != 0) return cmp;
+      } else {
+        final cmp = aStr.toLowerCase().compareTo(bStr.toLowerCase());
+        if (cmp != 0) return cmp;
+      }
+    }
+
+    return aMatches.length.compareTo(bMatches.length);
   }
 }
 

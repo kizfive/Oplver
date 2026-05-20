@@ -1,8 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -20,10 +21,14 @@ class UpdateInfo {
 }
 
 class UpdateCheckerService {
-  static const _apiUrl =
+  static const _customApiUrl = 'https://update.notess.top/api/check';
+  static const _githubApiUrl =
       'https://api.github.com/repos/kizfive/Oplver/releases/latest';
   static const _repoUrl = 'https://github.com/kizfive/Oplver/releases/latest';
+  static const _cacheTagKey = 'update_latest_tag';
+  static const _cacheUrlKey = 'update_latest_url';
   static const _deferUntilKey = 'update_defer_until_ms';
+  static const _timeout = Duration(seconds: 8);
 
   Future<void> checkForUpdates(
     BuildContext context, {
@@ -43,7 +48,7 @@ class UpdateCheckerService {
 
       final package = await PackageInfo.fromPlatform();
       final currentVersion = package.version;
-      final latest = await _fetchLatestRelease();
+      final latest = await _fetchLatestRelease(prefs);
       if (latest == null) {
         if (manual && context.mounted) {
           messenger.showSnackBar(
@@ -124,7 +129,8 @@ class UpdateCheckerService {
       };
 
       if (deferDuration > Duration.zero) {
-        final deferUntil = DateTime.now().add(deferDuration).millisecondsSinceEpoch;
+        final deferUntil =
+            DateTime.now().add(deferDuration).millisecondsSinceEpoch;
         await prefs.setInt(_deferUntilKey, deferUntil);
       }
     } catch (_) {
@@ -136,31 +142,93 @@ class UpdateCheckerService {
     }
   }
 
-  Future<UpdateInfo?> _fetchLatestRelease() async {
-    try {
-      final response = await http.get(
-        Uri.parse(_apiUrl),
-        headers: const {
-          'Accept': 'application/vnd.github+json',
-          'User-Agent': 'Oplver-Update-Checker',
-        },
-      );
+  /// 三层降级获取最新版本信息
+  Future<UpdateInfo?> _fetchLatestRelease(SharedPreferences prefs) async {
+    // 第一层：自定义 API
+    final custom = await _fetchFromCustomApi();
+    if (custom != null) return _cacheAndReturn(prefs, custom);
 
-      if (response.statusCode != 200) {
-        return null;
-      }
+    // 第二层：GitHub API（通过系统代理可达）
+    final github = await _fetchFromGitHub();
+    if (github != null) return _cacheAndReturn(prefs, github);
 
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      final tag = (data['tag_name'] as String?) ?? '';
-      final htmlUrl = (data['html_url'] as String?) ?? _repoUrl;
-      if (tag.isEmpty) {
-        return null;
-      }
-
-      return UpdateInfo(tag: tag, url: htmlUrl);
-    } catch (_) {
-      return null;
+    // 第三层：本地缓存
+    final cachedTag = prefs.getString(_cacheTagKey);
+    final cachedUrl = prefs.getString(_cacheUrlKey);
+    if (cachedTag != null && cachedTag.isNotEmpty) {
+      return UpdateInfo(tag: cachedTag, url: cachedUrl ?? _repoUrl);
     }
+
+    return null;
+  }
+
+  Future<UpdateInfo?> _fetchFromCustomApi() async {
+    try {
+      final client = HttpClient();
+      client.connectionTimeout = _timeout;
+      try {
+        final uri = Uri.parse(_customApiUrl);
+        final request = await client.getUrl(uri);
+        request.headers.set('Accept', 'application/json');
+        request.headers.set('User-Agent', 'Oplver-Update-Checker');
+
+        final response = await request.close().timeout(_timeout);
+        if (response.statusCode == 200) {
+          final body = await response.transform(utf8.decoder).join();
+          final data = jsonDecode(body) as Map<String, dynamic>;
+          // API返回格式: {"version":"v1.x.x","url":"..."}
+          final version = (data['version'] as String?) ?? '';
+          final url = (data['url'] as String?) ?? _repoUrl;
+          if (version.isNotEmpty) {
+            return UpdateInfo(tag: version, url: url);
+          }
+        }
+      } finally {
+        client.close();
+      }
+    } on TimeoutException {
+      // 超时，降级
+    } on SocketException {
+      // 网络不可达，降级
+    } catch (_) {}
+    return null;
+  }
+
+  Future<UpdateInfo?> _fetchFromGitHub() async {
+    try {
+      final client = HttpClient();
+      client.connectionTimeout = _timeout;
+      try {
+        final uri = Uri.parse(_githubApiUrl);
+        final request = await client.getUrl(uri);
+        request.headers.set('Accept', 'application/vnd.github+json');
+        request.headers.set('User-Agent', 'Oplver-Update-Checker');
+
+        final response = await request.close().timeout(_timeout);
+        if (response.statusCode == 200) {
+          final body = await response.transform(utf8.decoder).join();
+          final data = jsonDecode(body) as Map<String, dynamic>;
+          final tag = (data['tag_name'] as String?) ?? '';
+          final htmlUrl = (data['html_url'] as String?) ?? _repoUrl;
+          if (tag.isNotEmpty) {
+            return UpdateInfo(tag: tag, url: htmlUrl);
+          }
+        }
+      } finally {
+        client.close();
+      }
+    } on TimeoutException {
+      // 超时，降级
+    } on SocketException {
+      // 网络不可达，降级
+    } catch (_) {}
+    return null;
+  }
+
+  UpdateInfo _cacheAndReturn(SharedPreferences prefs, UpdateInfo info) {
+    prefs.setString(_cacheTagKey, info.tag);
+    prefs.setString(_cacheUrlKey, info.url);
+    return info;
   }
 
   String _normalizeVersion(String raw) {
